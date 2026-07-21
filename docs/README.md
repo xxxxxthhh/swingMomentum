@@ -43,6 +43,7 @@
 | [decisions/2026-07-21_phase1_scope_and_stack.md](./decisions/2026-07-21_phase1_scope_and_stack.md) | Accepted | Phase 1 技术栈（§1）；§2/§3 见后续 ADR |
 | [decisions/2026-07-22_phase1_mvp_slicing_v1_1.md](./decisions/2026-07-22_phase1_mvp_slicing_v1_1.md) | Accepted | 两阶段 MVP、Watchlist、状态机、Setup/Fund 边界 |
 | [decisions/2026-07-22_phase0_repo_foundation.md](./decisions/2026-07-22_phase0_repo_foundation.md) | Accepted | Phase 0：domain/config/fixtures/experiments/CI |
+| [decisions/2026-07-22_m1_data_provider_and_universe.md](./decisions/2026-07-22_m1_data_provider_and_universe.md) | Accepted | M1：yfinance、股票池快照、Bar 双价格、fixture 生成器 |
 | [reviews/2026-07-22_phase1_plan_review.md](./reviews/2026-07-22_phase1_plan_review.md) | Accepted | Phase 1 计划评审结论 |
 | [reviews/2026-07-22_repo_skeleton_review.md](./reviews/2026-07-22_repo_skeleton_review.md) | Accepted | Repo 骨架评审；驱动 Phase 0 |
 

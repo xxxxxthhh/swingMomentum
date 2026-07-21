@@ -6,7 +6,7 @@
 | 状态 | accepted |
 | 日期 | 2026-07-21 |
 | 策略版本 | SMM-V1.0.0 |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)（当前）；[../plans/2026-07-21_phase1_implementation_plan.md](../plans/2026-07-21_phase1_implementation_plan.md)（历史） |
 | 部分被替代 | [2026-07-22_phase1_mvp_slicing_v1_1.md](./2026-07-22_phase1_mvp_slicing_v1_1.md) 修订 **§2 实施优先级** 与 **§3 基本面落地方式**；**§1 技术栈仍有效** |
 | 变更摘要 | 冻结 Phase 1 栈、MVP 优先级、基本面精简策略 |

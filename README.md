@@ -2,27 +2,45 @@
 
 Personal **Swing Momentum** trading system: constitution-driven rules, daily scanner, shadow/paper execution — not a black-box “pick stocks and hope” script.
 
-**Implementation status:** docs baseline ready. **Next code work is Phase 0 Foundation** (domain, config, fake data, fixtures, CI) — **not** Scanner or yfinance yet. Then Phase 1: MVP-A Signal → MVP-B Risk+Paper. No live auto-trading.
+---
 
-## Docs (source of truth)
+## Supreme source of truth
+
+| Priority | Document | Role |
+|----------|----------|------|
+| **1 (highest)** | **[`CONSTITUTION.md`](./CONSTITUTION.md)** | Trading constitution + strategy specification (v2.0). **Code and other docs lose if they conflict.** |
+| 2 | [`configs/smm_v1_0_0.yaml`](./configs/smm_v1_0_0.yaml) | Frozen executable parameters (must not contradict the constitution) |
+| 3 | [`docs/system-boundary.md`](./docs/system-boundary.md) | What the system may / may not know |
+| 4 | [`docs/plans/`](./docs/plans/), [`docs/decisions/`](./docs/decisions/) | How we build; why we chose X |
+| 5 | Implementation (`src/`) | Must implement the above; never redefine strategy in code alone |
+
+> If you only open one file in this repository, open **[`CONSTITUTION.md`](./CONSTITUTION.md)**.
+
+---
+
+**Implementation status:** Phase 0 foundation is in place (domain, config, fake data, fixtures, CI). Next: Phase 1 MVP-A Signal → MVP-B Risk+Paper. **No live auto-trading.**
+
+## Docs map
 
 | Path | Role |
 |------|------|
-| [`docs/specs/`](./docs/specs/) | Trading constitution & strategy specification |
-| [`docs/system-boundary.md`](./docs/system-boundary.md) | What the system may know / must not know |
-| [`docs/plans/`](./docs/plans/) | Phase 0 foundation + Phase 1 implementation |
-| [`docs/decisions/`](./docs/decisions/) | ADRs (this folder is the ADR log) |
+| **[`CONSTITUTION.md`](./CONSTITUTION.md)** | **最高权威：交易宪法与策略规格** |
+| [`docs/README.md`](./docs/README.md) | Documentation library index & audit rules |
+| [`docs/system-boundary.md`](./docs/system-boundary.md) | System boundary |
+| [`docs/plans/`](./docs/plans/) | Phase 0 / Phase 1 implementation plans |
+| [`docs/decisions/`](./docs/decisions/) | ADRs |
 | [`docs/reviews/`](./docs/reviews/) | Design / stage reviews |
 | [`docs/runbooks/`](./docs/runbooks/) | Operational runbooks (as added) |
-
-Start here: **[docs/README.md](./docs/README.md)**
+| [`docs/specs/`](./docs/specs/) | Secondary specs only (constitution lives at repo root) |
 
 | Plan | When |
 |------|------|
-| **[Phase 0 Foundation](./docs/plans/2026-07-22_phase0_foundation_implementation_plan.md)** | **Do this first** (domain / config / fixtures / CI) |
-| [Phase 1 v1.1](./docs/plans/2026-07-22_phase1_implementation_plan_v1_1.md) | After Phase 0 (MVP-A → MVP-B) |
+| [Phase 0 Foundation](./docs/plans/2026-07-22_phase0_foundation_implementation_plan.md) | Done (foundation code) |
+| [Phase 1 v1.1](./docs/plans/2026-07-22_phase1_implementation_plan_v1_1.md) | Next: real data → MVP-A → MVP-B |
 
 ## Principles (short)
+
+Derived from the constitution — full text in [`CONSTITUTION.md`](./CONSTITUTION.md):
 
 - Risk engine is independent and cannot be bypassed by the scanner
 - Fail-closed on bad or missing data
@@ -33,7 +51,7 @@ Start here: **[docs/README.md](./docs/README.md)**
 - Core types are **domain objects** (Signal / Order / Position / Trade), not only DataFrames
 - Research goes through **experiments/**; notebooks are read-only analytics
 
-## Development (Phase 0)
+## Development
 
 ```bash
 python -m venv .venv

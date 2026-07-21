@@ -6,7 +6,7 @@
 | 状态 | accepted |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（执行参数以冻结 config 为准；见 §6） |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 关联评审 | [../reviews/2026-07-22_phase1_plan_review.md](../reviews/2026-07-22_phase1_plan_review.md) |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md) |
 | 部分替代 | [2026-07-21_phase1_scope_and_stack.md](./2026-07-21_phase1_scope_and_stack.md) 的 **§2 实施优先级** 与 **§3 基本面落地方式** |

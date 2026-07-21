@@ -6,7 +6,7 @@
 | 状态 | active |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0 |
-| 关联规格 | [specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](./specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../CONSTITUTION.md](../CONSTITUTION.md) |
 | 关联决策 | [decisions/2026-07-22_phase0_repo_foundation.md](./decisions/2026-07-22_phase0_repo_foundation.md) |
 | 变更摘要 | 明确系统知道什么 / 不知道什么 / 不做什么 |
 

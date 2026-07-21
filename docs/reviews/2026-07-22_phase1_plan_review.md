@@ -7,7 +7,7 @@
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0 |
 | 评审对象 | [../plans/2026-07-21_phase1_implementation_plan.md](../plans/2026-07-21_phase1_implementation_plan.md) |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 后续动作 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)、[../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md](../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md) |
 | 变更摘要 | 批准 v1.0 计划方向；要求修订 Signal 生命周期、Watchlist、两阶段 MVP 后再编码 |
 

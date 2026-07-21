@@ -6,7 +6,7 @@
 | 状态 | approved |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0 |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 关联边界 | [../system-boundary.md](../system-boundary.md) |
 | 关联决策 | [../decisions/2026-07-22_phase0_repo_foundation.md](../decisions/2026-07-22_phase0_repo_foundation.md) |
 | 关联评审 | [../reviews/2026-07-22_repo_skeleton_review.md](../reviews/2026-07-22_repo_skeleton_review.md) |

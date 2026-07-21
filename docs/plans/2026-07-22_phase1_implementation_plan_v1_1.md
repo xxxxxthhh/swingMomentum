@@ -6,7 +6,7 @@
 | 状态 | approved |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（参数以冻结 YAML 为准） |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 关联决策 | [../decisions/2026-07-21_phase1_scope_and_stack.md](../decisions/2026-07-21_phase1_scope_and_stack.md)、[../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md](../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md) |
 | 关联评审 | [../reviews/2026-07-22_phase1_plan_review.md](../reviews/2026-07-22_phase1_plan_review.md)、[../reviews/2026-07-22_repo_skeleton_review.md](../reviews/2026-07-22_repo_skeleton_review.md) |
 | 前置计划 | [2026-07-22_phase0_foundation_implementation_plan.md](./2026-07-22_phase0_foundation_implementation_plan.md)（**先完成 Phase 0 再 M1+**） |

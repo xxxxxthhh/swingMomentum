@@ -6,7 +6,7 @@
 | 状态 | superseded |
 | 日期 | 2026-07-21 |
 | 策略版本 | SMM-V1.0.0 |
-| 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
+| 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md) |
 | 关联决策 | [../decisions/2026-07-21_phase1_scope_and_stack.md](../decisions/2026-07-21_phase1_scope_and_stack.md) |
 | 替代文档 | [2026-07-22_phase1_implementation_plan_v1_1.md](./2026-07-22_phase1_implementation_plan_v1_1.md) |
 | 变更摘要 | Phase 1 端到端 MVP 实施计划首版落盘；**已被 v1.1 替代** |

@@ -1,14 +1,18 @@
-# specs/ — 规格与宪法
+# specs/ — 附加规格（非宪法正文）
 
-存放**不应仅因短期盈亏而改动**的系统定义：
+**交易宪法不在此目录。**
 
-- 交易宪法与原则
-- 策略规格（信号、仓位、出场）
-- 数据与验证规范
-- 阶段范围与禁止事项
+| 文档 | 位置 | 权威 |
+|------|------|------|
+| **交易宪法 + Swing Momentum 规格 v2** | **[`/CONSTITUTION.md`](../../CONSTITUTION.md)**（仓库根） | **最高** |
 
-当前基线：
+本目录用于：
 
-- [Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](./Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md)
+- 未来拆分的数据规范、接口契约、子策略规格等**从属**规格
+- 指向宪法的兼容 stub（旧文件名）
 
-修订规则见该文档「规则修改机制」与上级 [docs/README.md](../README.md) 审计约定。
+当前：
+
+- [Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](./Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) — **stub only** → 根目录 `CONSTITUTION.md`
+
+修订宪法须走宪法内「规则修改机制」与 [docs/README.md](../README.md) 审计约定；**不得**在本目录另写一份并行「真宪法」。

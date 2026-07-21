@@ -91,9 +91,32 @@ def test_shipped_snapshot_contains_no_etfs() -> None:
     assert not (symbols & BENCHMARK_ETFS)
 
 
-def test_shipped_snapshot_sectors_are_gics_keys() -> None:
+def test_shipped_snapshot_sectors_are_gics_keys_or_empty() -> None:
+    """Empty is allowed and meaningful: a missing sector propagates and drops
+    the symbol, whereas a wrong one silently corrupts the whole sector's RS
+    ranking. Nasdaq-only names have no GICS source, so they are left empty."""
     for row in shipped_rows():
-        assert row["sector"] in GICS_SECTORS, f"{row['symbol']}: bad sector {row['sector']!r}"
+        assert row["sector"] in GICS_SECTORS or row["sector"] == "", (
+            f"{row['symbol']}: bad sector {row['sector']!r}"
+        )
+
+
+def test_sp500_members_all_have_a_gics_sector() -> None:
+    """The S&P 500 page carries GICS directly — none of those may be empty."""
+    for row in shipped_rows():
+        if row["index_membership"] in ("sp500", "both"):
+            assert row["sector"] in GICS_SECTORS, f"{row['symbol']} lost its GICS sector"
+
+
+def test_nasdaq_only_members_have_no_guessed_sector() -> None:
+    """The Nasdaq-100 page carries ICB, which does not convert safely to GICS.
+
+    Mapping it anyway was measured at a 27% error rate (NBIS, PDD, SPCX, TRI
+    out of 15), so these are deliberately left empty rather than guessed.
+    """
+    for row in shipped_rows():
+        if row["index_membership"] == "ndx100":
+            assert row["sector"] == "", f"{row['symbol']}: sector must not be guessed from ICB"
 
 
 def test_shipped_snapshot_uses_yahoo_share_class_form() -> None:

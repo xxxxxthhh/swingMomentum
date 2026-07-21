@@ -54,23 +54,20 @@ GICS_TO_KEY = {
     "Communication Services": "communication_services",
 }
 
-#: ICB industry -> GICS key, for Nasdaq-100 names absent from the S&P 500.
-#: Only unambiguous top-level equivalences are listed; anything else resolves to
-#: an empty sector on purpose.
-ICB_TO_KEY = {
-    "Technology": "information_technology",
-    "Health Care": "health_care",
-    "Consumer Discretionary": "consumer_discretionary",
-    "Consumer Staples": "consumer_staples",
-    "Consumer Services": "consumer_discretionary",
-    "Financials": "financials",
-    "Industrials": "industrials",
-    "Energy": "energy",
-    "Basic Materials": "materials",
-    "Utilities": "utilities",
-    "Real Estate": "real_estate",
-    "Telecommunications": "communication_services",
-}
+# There is deliberately no ICB -> GICS mapping here.
+#
+# The first version of this script mapped the Nasdaq-100 page's ICB industries
+# onto GICS keys. Cross-checking the 15 Nasdaq-only names against an
+# independent classification found **4 wrong** (NBIS, PDD, SPCX, TRI) — a 27%
+# error rate. ICB and GICS genuinely disagree about where some businesses sit;
+# SpaceX is ICB "Telecommunications" (Starlink) but GICS Industrials /
+# Aerospace & Defense.
+#
+# A systematic-looking table made that a guess in disguise. Per the project's
+# own rule, a missing sector propagates and drops the symbol from candidates,
+# while a wrong sector silently corrupts the relative-strength ranking for
+# every peer in that sector. So Nasdaq-only names get an EMPTY sector until a
+# real GICS source covers them.
 
 
 def to_yahoo_symbol(symbol: str) -> str:
@@ -99,15 +96,43 @@ def fetch_sp500() -> dict[str, tuple[str, str]]:
 
 
 def fetch_ndx() -> dict[str, tuple[str, str]]:
-    """``{symbol: (name, sector_key)}`` for the Nasdaq-100."""
+    """``{symbol: (name, sector_key)}`` for the Nasdaq-100.
+
+    Sector is always empty: the page carries ICB industries, which are not
+    safely convertible to GICS (see the note above ``GICS_TO_KEY``). Names that
+    are also in the S&P 500 pick up a real GICS sector there.
+    """
     frame = _read_tables(NDX_URL)[0]
-    industry_col = next(c for c in frame.columns if "ICB Industry" in str(c))
     out: dict[str, tuple[str, str]] = {}
     for _, row in frame.iterrows():
         symbol = to_yahoo_symbol(str(row["Ticker"]))
-        sector = ICB_TO_KEY.get(str(row[industry_col]).strip(), "")
-        out[symbol] = (str(row["Company"]).strip(), sector)
+        out[symbol] = (str(row["Company"]).strip(), "")
     return out
+
+
+def verify_symbols(symbols: list[str]) -> list[str]:
+    """Return symbols with no tradeable price data.
+
+    A row count in the expected range cannot catch one bad ticker hidden among
+    a hundred good ones. Asking the market data provider whether each symbol
+    actually trades can: a fabricated, delisted, or mis-formatted ticker
+    (``BRK.B`` instead of ``BRK-B``) returns nothing.
+    """
+    import yfinance  # noqa: PLC0415 - manual tool, not a package dependency
+
+    missing: list[str] = []
+    for start in range(0, len(symbols), 120):
+        chunk = symbols[start : start + 120]
+        frame = yfinance.download(
+            chunk, period="1mo", auto_adjust=False, progress=False, threads=True
+        )
+        if frame is None or frame.empty:
+            sys.exit("verification aborted: provider returned nothing (rate limited?)")
+        close = frame["Close"]
+        missing.extend(
+            s for s in chunk if s not in close.columns or int(close[s].notna().sum()) == 0
+        )
+    return missing
 
 
 def build_rows(as_of: date) -> list[dict[str, str]]:
@@ -144,10 +169,22 @@ def main() -> None:
         default=Path(__file__).resolve().parents[1] / "configs" / "universe",
         type=Path,
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Check every symbol actually trades before writing (recommended)",
+    )
     args = parser.parse_args()
     as_of = date.fromisoformat(args.as_of)
 
     rows = build_rows(as_of)
+
+    if args.verify:
+        missing = verify_symbols([r["symbol"] for r in rows])
+        if missing:
+            sys.exit(f"refusing to write: {len(missing)} symbols have no price data: {missing}")
+        print(f"verified: all {len(rows)} symbols return price data")
+
     target = args.out_dir / f"{as_of.isoformat()}_sp500_ndx.csv"
     with target.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(

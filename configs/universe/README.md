@@ -35,6 +35,9 @@ a file cannot be renamed into a different point in time.
 |------|---------|-------------|
 | `2026-07-22_sp500_ndx.csv` | **518** | 415 S&P-only · 88 both · 15 Nasdaq-100-only |
 
+503 of the 518 carry a GICS sector; the 15 Nasdaq-only names are deliberately
+blank (see below).
+
 Cross-check: 415 + 88 = 503 S&P 500 constituents, 88 + 15 = 103 Nasdaq-100.
 
 **No ETFs.** Constitution §10 restricts the universe to common stock. SPY and
@@ -55,16 +58,37 @@ python scripts/build_universe_snapshot.py --as-of YYYY-MM-DD
 | Index | Source | Classification |
 |-------|--------|----------------|
 | S&P 500 | Wikipedia, "List of S&P 500 companies" | **GICS** sector, used directly |
-| Nasdaq-100 | Wikipedia, "List of NASDAQ-100 companies" | **ICB** industry, mapped to GICS |
+| Nasdaq-100 | Wikipedia, "List of NASDAQ-100 companies" | ICB industry — **not used** |
 
-Where a symbol is in both indices the **GICS** sector wins, since that is what
-`sector_benchmarks` is keyed on. A symbol whose sector cannot be resolved gets
-an **empty** sector rather than a guess — a missing sector propagates and drops
-the symbol from candidates, whereas a wrong sector would silently corrupt the
-relative-strength ranking. The current snapshot resolved all 518.
+### Why Nasdaq-only names have no sector
 
-Refreshing is a human act: run the script, read the diff, and confirm the counts
-still reconcile before committing.
+The first version of the script mapped the Nasdaq-100 page's ICB industries
+onto GICS keys. Cross-checking the 15 Nasdaq-only names against an independent
+classification found **4 wrong** — NBIS, PDD, SPCX and TRI — a **27% error
+rate**. ICB and GICS genuinely disagree about some businesses: SpaceX is ICB
+"Telecommunications" (Starlink) but GICS Industrials / Aerospace & Defense.
+
+A systematic-looking lookup table made that a guess in disguise. So those 15
+carry an **empty** sector. A missing sector propagates and drops the symbol from
+candidates; a wrong one silently corrupts the relative-strength ranking for
+every peer in that sector. Losing 15 of 518 names is the cheaper error.
+
+Symbols in **both** indices take the real GICS sector from the S&P 500 page.
+
+### Verification
+
+`--verify` asks the market-data provider whether every symbol actually trades:
+
+```bash
+python scripts/build_universe_snapshot.py --as-of YYYY-MM-DD --verify
+```
+
+Row-count guards cannot catch one bad ticker hidden among a hundred good ones;
+this can. A fabricated, delisted, or mis-formatted ticker (`BRK.B` instead of
+`BRK-B`) returns no data and the script refuses to write.
+
+Refreshing is a human act: run the script with `--verify`, read the diff, and
+confirm the counts still reconcile before committing.
 
 ## Selection rules
 

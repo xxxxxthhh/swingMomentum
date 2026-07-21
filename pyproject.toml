@@ -14,12 +14,21 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "typer>=0.12",
+    # Core, not an extra: the Parquet cache and its idempotency test must run
+    # in the network-free default CI (ADR 2026-07-22 §1).
+    "pyarrow>=15.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+]
+# Real market data. Kept out of core so default installs and default CI stay
+# network-free, and so business code cannot reach yfinance except through
+# DataProvider (ADR §1).
+market = [
+    "yfinance>=0.2",
 ]
 
 [project.scripts]
@@ -34,6 +43,12 @@ smm = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# Network tests are opt-in: `pytest -m network`. CI must never depend on a live
+# market-data feed (ADR §1).
+addopts = "-m 'not network'"
+markers = [
+    "network: hits a live external data source; deselected by default",
+]
 
 [tool.ruff]
 line-length = 100

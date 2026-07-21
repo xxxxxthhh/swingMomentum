@@ -32,6 +32,9 @@ class UniverseSection(BaseModel):
     primary: list[str]
     min_price: float = Field(gt=0)
     min_avg_dollar_volume_20d: float = Field(gt=0)
+    # Data-governance guard, not a strategy rule: changes config_hash but does
+    # not bump the strategy version (ADR 2026-07-22 §2.4).
+    max_snapshot_age_days: int = Field(gt=0)
 
 
 class MarketRegimeSection(BaseModel):

@@ -19,9 +19,14 @@ from smm.domain.models import (
     Trade,
     assert_signal_transition,
 )
+from smm.domain.views import AdjustedBar, TradeableBar, to_adjusted, to_tradeable
 
 __all__ = [
     "Bar",
+    "AdjustedBar",
+    "TradeableBar",
+    "to_adjusted",
+    "to_tradeable",
     "Signal",
     "OrderPlan",
     "Position",

@@ -16,6 +16,8 @@ universe:
     - NASDAQ100_UNIQUE
   min_price: 10.0
   min_avg_dollar_volume_20d: 20000000.0
+  # Fail closed when the newest snapshot <= as_of is older than this.
+  max_snapshot_age_days: 90
 
 market_regime:
   benchmark: SPY

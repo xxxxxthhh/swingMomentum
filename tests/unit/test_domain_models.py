@@ -27,12 +27,16 @@ def test_bar_ok() -> None:
         low=99,
         close=104,
         volume=1e6,
+        adj_close=104,
+        adj_factor=1.0,
     )
     assert bar.symbol == "NVDA"
 
 
 def test_bar_rejects_bad_ohlc() -> None:
-    with pytest.raises(ValueError):
+    # Adjusted fields are supplied so the failure can only come from the OHLC
+    # invariant, not from a missing-field error.
+    with pytest.raises(ValueError, match="high must be"):
         Bar(
             symbol="X",
             date=date(2024, 1, 2),
@@ -41,6 +45,8 @@ def test_bar_rejects_bad_ohlc() -> None:
             low=95,
             close=100,
             volume=1,
+            adj_close=100,
+            adj_factor=1.0,
         )
 
 

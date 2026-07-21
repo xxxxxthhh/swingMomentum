@@ -25,10 +25,14 @@
 | 文档 | 状态 | 说明 |
 |------|------|------|
 | [specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](./specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) | Baseline v2.0 | 最高层设计：宪法、策略、验证、工程约束 |
-| [plans/2026-07-22_phase1_implementation_plan_v1_1.md](./plans/2026-07-22_phase1_implementation_plan_v1_1.md) | Approved | Phase 1 实施计划 v1.1（两阶段 MVP） |
-| [decisions/2026-07-21_phase1_scope_and_stack.md](./decisions/2026-07-21_phase1_scope_and_stack.md) | Accepted | Phase 1 技术栈（§1）；§2/§3 见 2026-07-22 ADR |
+| [system-boundary.md](./system-boundary.md) | Active | 系统知道什么 / 不知道什么 / 不做什么 |
+| [plans/2026-07-22_phase0_foundation_implementation_plan.md](./plans/2026-07-22_phase0_foundation_implementation_plan.md) | Approved | **下一步实现**：Phase 0 工程底座（先于 Scanner） |
+| [plans/2026-07-22_phase1_implementation_plan_v1_1.md](./plans/2026-07-22_phase1_implementation_plan_v1_1.md) | Approved | Phase 1 业务实施 v1.1（MVP-A → MVP-B） |
+| [decisions/2026-07-21_phase1_scope_and_stack.md](./decisions/2026-07-21_phase1_scope_and_stack.md) | Accepted | Phase 1 技术栈（§1）；§2/§3 见后续 ADR |
 | [decisions/2026-07-22_phase1_mvp_slicing_v1_1.md](./decisions/2026-07-22_phase1_mvp_slicing_v1_1.md) | Accepted | 两阶段 MVP、Watchlist、状态机、Setup/Fund 边界 |
+| [decisions/2026-07-22_phase0_repo_foundation.md](./decisions/2026-07-22_phase0_repo_foundation.md) | Accepted | Phase 0：domain/config/fixtures/experiments/CI |
 | [reviews/2026-07-22_phase1_plan_review.md](./reviews/2026-07-22_phase1_plan_review.md) | Accepted | Phase 1 计划评审结论 |
+| [reviews/2026-07-22_repo_skeleton_review.md](./reviews/2026-07-22_repo_skeleton_review.md) | Accepted | Repo 骨架评审；驱动 Phase 0 |
 
 ### 历史 / 已替代
 
@@ -43,8 +47,9 @@
 ### 1. 单一事实来源
 
 - **策略是什么**：以 `specs/` 为准。实现与文档冲突时，默认实现有问题。
-- **怎么建系统**：以 `plans/` 为准。
-- **为什么这样选**：以 `decisions/` 为准。
+- **系统边界**：以 [`system-boundary.md`](./system-boundary.md) 为准。
+- **怎么建系统**：以 `plans/` 为准（先 Phase 0，再 Phase 1）。
+- **为什么这样选**：以 `decisions/` 为准（ADR；本目录即 ADR 存放处，不另建 `adr/`）。
 - **怎么日常跑**：以 `runbooks/` 为准。
 - **结果是否过关**：以 `reviews/` 与运行产物（信号/交易/报告）为准。
 

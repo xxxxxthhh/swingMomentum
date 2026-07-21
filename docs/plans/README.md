@@ -8,7 +8,8 @@
 
 当前：
 
-- [2026-07-22_phase1_implementation_plan_v1_1.md](./2026-07-22_phase1_implementation_plan_v1_1.md)（approved）— **现行实施依据**
+- [2026-07-22_phase0_foundation_implementation_plan.md](./2026-07-22_phase0_foundation_implementation_plan.md)（approved）— **下一步编码：Phase 0 底座**
+- [2026-07-22_phase1_implementation_plan_v1_1.md](./2026-07-22_phase1_implementation_plan_v1_1.md)（approved）— Phase 1 业务（Phase 0 完成后）
 
 历史：
 

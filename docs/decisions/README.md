@@ -4,9 +4,12 @@
 
 模板字段见 [docs/README.md](../README.md)。
 
+本目录即 **ADR（Architecture Decision Record）** 存放处；不另建 `docs/adr/`。
+
 当前：
 
-- [2026-07-21_phase1_scope_and_stack.md](./2026-07-21_phase1_scope_and_stack.md)（accepted；§1 技术栈有效，§2/§3 部分被 2026-07-22 修订）
+- [2026-07-21_phase1_scope_and_stack.md](./2026-07-21_phase1_scope_and_stack.md)（accepted；§1 技术栈有效，§2/§3 部分被后续 ADR 修订）
 - [2026-07-22_phase1_mvp_slicing_v1_1.md](./2026-07-22_phase1_mvp_slicing_v1_1.md)（accepted）— 两阶段 MVP 与 V1 规则边界
+- [2026-07-22_phase0_repo_foundation.md](./2026-07-22_phase0_repo_foundation.md)（accepted）— Phase 0 domain/config/fixtures/CI
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

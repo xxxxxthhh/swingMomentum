@@ -13,3 +13,4 @@
 当前：
 
 - [2026-07-22_phase1_plan_review.md](./2026-07-22_phase1_plan_review.md)（accepted）
+- [2026-07-22_repo_skeleton_review.md](./2026-07-22_repo_skeleton_review.md)（accepted）

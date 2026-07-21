@@ -8,9 +8,10 @@
 | 策略版本 | SMM-V1.0.0（参数以冻结 YAML 为准） |
 | 关联规格 | [../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md](../specs/Personal_Trading_Constitution_and_Swing_Momentum_Spec_v2.md) |
 | 关联决策 | [../decisions/2026-07-21_phase1_scope_and_stack.md](../decisions/2026-07-21_phase1_scope_and_stack.md)、[../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md](../decisions/2026-07-22_phase1_mvp_slicing_v1_1.md) |
-| 关联评审 | [../reviews/2026-07-22_phase1_plan_review.md](../reviews/2026-07-22_phase1_plan_review.md) |
+| 关联评审 | [../reviews/2026-07-22_phase1_plan_review.md](../reviews/2026-07-22_phase1_plan_review.md)、[../reviews/2026-07-22_repo_skeleton_review.md](../reviews/2026-07-22_repo_skeleton_review.md) |
+| 前置计划 | [2026-07-22_phase0_foundation_implementation_plan.md](./2026-07-22_phase0_foundation_implementation_plan.md)（**先完成 Phase 0 再 M1+**） |
 | 替代 | [2026-07-21_phase1_implementation_plan.md](./2026-07-21_phase1_implementation_plan.md)（v1.0，superseded） |
-| 变更摘要 | 两阶段 MVP；Watchlist + Signal State Machine；Setup 极简；Fund 过滤化；Synthetic 前置 |
+| 变更摘要 | 两阶段 MVP；Watchlist + Signal State Machine；Setup 极简；Fund 过滤化；Synthetic 前置；M0 由 Phase 0 加严 |
 
 **决策冻结：** Python + SQLite/Parquet + 可插拔数据源；**MVP-A Signal → MVP-B Risk+Paper**；V1 Setup = 突破+量能；基本面优先作风险过滤。  
 **范围：** 美股多头、日线、收盘后 Scanner + Shadow/Paper；**不**自动真实下单、不做空、无杠杆、无期权。
@@ -300,15 +301,21 @@ Mom 50% / RS 30% / Trend+Trigger 20%
 
 ## 6. 实施里程碑
 
-### M0 — 项目骨架与配置（0.5–1 天）
+### M0 — 项目骨架与配置 → **由 Phase 0 替代并加严**
 
-- 仓库结构、`pyproject.toml`、lint/test 骨架  
-- 冻结 `configs/smm_v1_0_0.yaml`（含 state 超时、Trigger、评分权重、fund_as_filter）  
-- `StrategyVersion`：version + config_hash  
-- `notebooks/README.md` 研究层约定  
-- 根 README：使命、非目标、如何跑一日任务  
+详见 **[Phase 0 Foundation Plan](./2026-07-22_phase0_foundation_implementation_plan.md)**。
 
-**验证：** pytest 绿；非法 config 被拒绝。
+除原 M0（包结构、YAML、config_hash、notebooks 约定）外，Phase 0 **额外强制**：
+
+- `src/smm/domain/` 最小领域模型  
+- Fake `DataProvider` + `tests/fixtures/`  
+- `experiments/` 研究治理占位  
+- CI  
+- [system-boundary](../system-boundary.md)  
+
+**禁止**在 Phase 0 未完成前进入 M1（真实行情）或 Scanner 业务实现。
+
+**验证：** Phase 0 DoD 清单全勾选。
 
 ---
 
@@ -460,17 +467,19 @@ M0–M4 完成（MVP-A）
 
 ## 11. 建议执行顺序
 
-1. **文档已就绪（本 v1.1 + ADR + 评审）**  
-2. **PR1 → PR2 → PR3 → PR4 → PR5（MVP-A）**  
-3. 信号观察窗口（不改执行 config 混统计）  
-4. **PR6 → PR7 → PR8（MVP-B）**  
-5. 研究轨 PR9+ 并行但隔离配置  
+1. **文档已就绪（本 v1.1 + Phase 0 计划 + ADR + 评审）**  
+2. **先完成 [Phase 0](./2026-07-22_phase0_foundation_implementation_plan.md)**（domain / config / fake / fixtures / CI）  
+3. **再** Phase 1：PR2 真实行情 → … → PR5（MVP-A）  
+4. 信号观察窗口（不改执行 config 混统计）  
+5. **PR6 → PR8（MVP-B）**  
+6. 研究轨 PR9+ 并行但隔离配置  
 
 **编码启动顺序强调：**
 
-1. 先 YAML 冻结  
-2. 先 Synthetic  
-3. 再真实数据  
+1. Phase 0：YAML + Domain + Fake + CI  
+2. Synthetic fixtures（Phase 0 起）  
+3. 再真实数据（M1）  
+4. 最后 Scanner 业务（M3）  
 
 ---
 

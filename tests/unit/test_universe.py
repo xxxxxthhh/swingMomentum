@@ -1,0 +1,145 @@
+"""Dated universe snapshot selection (ADR 2026-07-22 §2.1)."""
+
+from __future__ import annotations
+
+import csv
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from smm.core.errors import DataValidationError
+from smm.data.universe import load_snapshots, load_universe, select_snapshot
+
+REPO = Path(__file__).resolve().parents[2]
+SHIPPED = REPO / "configs" / "universe"
+
+
+def write_snapshot(
+    directory: Path,
+    snapshot_date: str,
+    *,
+    label: str = "test",
+    symbols: tuple[str, ...] = ("AAPL", "MSFT"),
+    row_date: str | None = None,
+) -> Path:
+    target = directory / f"{snapshot_date}_{label}.csv"
+    with target.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["symbol", "name", "index_membership", "snapshot_date"])
+        for symbol in symbols:
+            writer.writerow([symbol, f"{symbol} Inc.", "both", row_date or snapshot_date])
+    return target
+
+
+@pytest.fixture
+def universe_dir(tmp_path: Path) -> Path:
+    directory = tmp_path / "universe"
+    directory.mkdir()
+    return directory
+
+
+# --- shipped seed ----------------------------------------------------------
+
+
+def test_shipped_seed_snapshot_parses() -> None:
+    snapshots = load_snapshots(SHIPPED)
+    assert snapshots
+    assert "SPY" in snapshots[-1].symbols
+
+
+# --- allowed ---------------------------------------------------------------
+
+
+def test_picks_latest_snapshot_at_or_before_as_of(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-01-05", symbols=("OLD",))
+    write_snapshot(universe_dir, "2026-03-05", symbols=("MID",))
+    write_snapshot(universe_dir, "2026-06-05", symbols=("NEW",))
+    chosen = select_snapshot(
+        load_snapshots(universe_dir), date(2026, 4, 1), max_age_days=90
+    )
+    assert chosen.symbols == ("MID",)
+
+
+# --- forbidden: look-ahead -------------------------------------------------
+
+
+def test_future_snapshot_is_never_used(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-06-05", symbols=("FUTURE",))
+    with pytest.raises(DataValidationError, match="look-ahead"):
+        load_universe(universe_dir, date(2026, 1, 1), max_age_days=90)
+
+
+def test_exact_as_of_match_is_allowed(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-06-05", symbols=("TODAY",))
+    chosen = load_universe(universe_dir, date(2026, 6, 5), max_age_days=90)
+    assert chosen.symbols == ("TODAY",)
+
+
+# --- forbidden: stale ------------------------------------------------------
+
+
+def test_snapshot_older_than_limit_fails_closed(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-01-01")
+    with pytest.raises(DataValidationError, match="days old"):
+        load_universe(universe_dir, date(2026, 6, 1), max_age_days=90)
+
+
+def test_snapshot_inside_limit_is_served(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-05-01", symbols=("FRESH",))
+    chosen = load_universe(universe_dir, date(2026, 6, 1), max_age_days=90)
+    assert chosen.symbols == ("FRESH",)
+
+
+def test_stale_snapshot_is_not_silently_replaced_by_an_older_one(
+    universe_dir: Path,
+) -> None:
+    """Failing closed must not degrade into 'use whatever exists'."""
+    write_snapshot(universe_dir, "2025-01-01", symbols=("ANCIENT",))
+    write_snapshot(universe_dir, "2026-01-01", symbols=("OLD",))
+    with pytest.raises(DataValidationError, match="days old"):
+        load_universe(universe_dir, date(2026, 6, 1), max_age_days=90)
+
+
+# --- forbidden: inventing a universe --------------------------------------
+
+
+def test_no_snapshots_at_all_fails_closed(universe_dir: Path) -> None:
+    with pytest.raises(DataValidationError, match="no universe snapshots"):
+        load_universe(universe_dir, date(2026, 6, 1), max_age_days=90)
+
+
+def test_missing_directory_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="not found"):
+        load_universe(tmp_path / "absent", date(2026, 6, 1), max_age_days=90)
+
+
+# --- file integrity --------------------------------------------------------
+
+
+def test_filename_date_must_match_rows(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-06-05", row_date="2026-01-01")
+    with pytest.raises(DataValidationError, match="disagrees with"):
+        load_snapshots(universe_dir)
+
+
+def test_missing_columns_rejected(universe_dir: Path) -> None:
+    (universe_dir / "2026-06-05_bad.csv").write_text("symbol\nAAPL\n", encoding="utf-8")
+    with pytest.raises(DataValidationError, match="needs columns"):
+        load_snapshots(universe_dir)
+
+
+def test_unknown_membership_rejected(universe_dir: Path) -> None:
+    target = universe_dir / "2026-06-05_bad.csv"
+    target.write_text(
+        "symbol,name,index_membership,snapshot_date\nAAPL,Apple,russell2000,2026-06-05\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(DataValidationError, match="unknown index_membership"):
+        load_snapshots(universe_dir)
+
+
+def test_duplicate_symbols_rejected(universe_dir: Path) -> None:
+    write_snapshot(universe_dir, "2026-06-05", symbols=("AAPL", "AAPL"))
+    with pytest.raises(DataValidationError, match="duplicate symbols"):
+        load_snapshots(universe_dir)

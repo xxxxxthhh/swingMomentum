@@ -9,24 +9,31 @@ from pathlib import Path
 from smm.core.errors import DataValidationError
 from smm.domain.models import Bar
 
-# tests/fixtures/ohlcv relative to repo root
-_DEFAULT_FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "ohlcv"
-
 
 class FakeProvider:
     """Load bars from CSV files under a fixtures directory.
 
     CSV columns (header required):
-    ``symbol,date,open,high,low,close,volume`` with ``date`` as ``YYYY-MM-DD``.
+    ``symbol,date,open,high,low,close,volume,adj_close,adj_factor`` with
+    ``date`` as ``YYYY-MM-DD``.
+
+    ``adj_close``/``adj_factor`` are required rather than defaulted: silently
+    substituting ``close`` for a missing ``adj_close`` is exactly what ADR
+    2026-07-22 §3.3 forbids. Fixtures with no corporate action state
+    ``adj_factor=1.0`` explicitly.
+
+    ``fixtures_dir`` is required. The committed CSVs it used to default to were
+    removed in favour of :mod:`smm.data.generator` (ADR §4.1), so a default
+    would only ever point at nothing.
     """
 
     def __init__(
         self,
-        fixtures_dir: Path | str | None = None,
+        fixtures_dir: Path | str,
         *,
         universe: list[str] | None = None,
     ) -> None:
-        self._dir = Path(fixtures_dir) if fixtures_dir else _DEFAULT_FIXTURES
+        self._dir = Path(fixtures_dir)
         self._bars_by_symbol: dict[str, list[Bar]] = {}
         self._load_all()
         if universe is not None:
@@ -43,7 +50,17 @@ class FakeProvider:
     def _load_file(self, path: Path) -> None:
         with path.open(newline="", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
-            required = {"symbol", "date", "open", "high", "low", "close", "volume"}
+            required = {
+                "symbol",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "adj_close",
+                "adj_factor",
+            }
             if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
                 raise DataValidationError(
                     f"{path.name}: CSV must have columns {sorted(required)}"
@@ -57,6 +74,8 @@ class FakeProvider:
                     low=float(row["low"]),
                     close=float(row["close"]),
                     volume=float(row["volume"]),
+                    adj_close=float(row["adj_close"]),
+                    adj_factor=float(row["adj_factor"]),
                 )
                 self._bars_by_symbol.setdefault(bar.symbol, []).append(bar)
         for symbol, bars in self._bars_by_symbol.items():

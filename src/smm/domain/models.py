@@ -18,7 +18,22 @@ from smm.domain.enums import (
 
 
 class Bar(BaseModel):
-    """Single daily OHLCV bar."""
+    """Single daily bar carrying both price series required by constitution §12.1.
+
+    ``open/high/low/close`` are the **tradeable** series (what fills and stops
+    must use). ``adj_close`` is the total-return series (what returns, moving
+    averages and momentum must use); ``adj_factor`` derives the remaining
+    adjusted prices — see :mod:`smm.domain.views`.
+
+    Both adjusted fields are **required**. Defaulting ``adj_close`` to ``close``
+    would silently substitute a favourable value for missing data, which ADR
+    2026-07-22 §3.3 and constitution principle 11 forbid. Synthetic bars with no
+    corporate action set ``adj_factor=1.0`` explicitly — that is a known value,
+    not a missing one.
+
+    Note: what a provider calls "unadjusted" varies. Yahoo's close is already
+    split-adjusted (dividend-unadjusted); see the yfinance provider docstring.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -29,6 +44,8 @@ class Bar(BaseModel):
     low: float = Field(gt=0)
     close: float = Field(gt=0)
     volume: float = Field(ge=0)
+    adj_close: float = Field(gt=0)
+    adj_factor: float = Field(gt=0)
 
     @model_validator(mode="after")
     def ohlc_consistency(self) -> Bar:
@@ -40,6 +57,17 @@ class Bar(BaseModel):
             raise ValueError(msg)
         if self.low > min(self.open, self.close):
             msg = "low must be <= open and close"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def adj_factor_consistency(self) -> Bar:
+        """``close * adj_factor`` must reproduce ``adj_close`` (ADR §3.2)."""
+        if abs(self.close * self.adj_factor - self.adj_close) > 1e-6 * self.adj_close:
+            msg = (
+                f"adj_factor inconsistent: close={self.close} * adj_factor="
+                f"{self.adj_factor} != adj_close={self.adj_close}"
+            )
             raise ValueError(msg)
         return self
 

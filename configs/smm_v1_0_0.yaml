@@ -16,6 +16,18 @@ universe:
     - NASDAQ100_UNIQUE
   min_price: 10.0
   min_avg_dollar_volume_20d: 20000000.0
+  # Fail closed when the newest snapshot <= as_of is older than this.
+  max_snapshot_age_days: 90
+
+# Data-quality thresholds (constitution §12.4). Governance guards, not strategy
+# rules: changing these moves config_hash but does not bump the version.
+validation:
+  max_abs_daily_return: 0.50        # |close/prev_close - 1| above this stops the run
+  max_volume_spike_ratio: 25.0      # vs the series median
+  max_session_gap_weekdays: 5       # weekdays missing between consecutive bars
+  min_adj_factor: 0.05
+  adj_factor_tolerance: 0.000001
+  split_ratio_tolerance: 0.03       # how near an integer ratio counts as a split step
 
 market_regime:
   benchmark: SPY

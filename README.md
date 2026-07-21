@@ -18,7 +18,7 @@ Personal **Swing Momentum** trading system: constitution-driven rules, daily sca
 
 ---
 
-**Implementation status:** Phase 0 foundation is in place (domain, config, fake data, fixtures, CI). Next: Phase 1 MVP-A Signal → MVP-B Risk+Paper. **No live auto-trading.**
+**Implementation status:** Phase 0 foundation done. Phase 1 **M1** in review (real market data, §12.4 validation, Parquet cache, dated universe snapshots, deterministic synthetic paths). Next: M2 features + regime → M3/M4 MVP-A. **No live auto-trading.**
 
 ## Docs map
 
@@ -57,15 +57,30 @@ Derived from the constitution — full text in [`CONSTITUTION.md`](./CONSTITUTIO
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest -q
+pytest -q                   # network tests are deselected by default
 smm show-config
-smm version
+smm ingest --as-of 2024-01-26          # offline: deterministic synthetic paths
+```
+
+Real market data is an **optional extra**, so default installs and CI stay
+network-free:
+
+```bash
+pip install -e ".[dev,market]"
+smm ingest --as-of 2024-06-14 --source market -s NVDA
+pytest -m network -o addopts=""        # opt-in, hits Yahoo
 ```
 
 - Strategy parameters: [`configs/smm_v1_0_0.yaml`](./configs/smm_v1_0_0.yaml)
-- Domain types: `src/smm/domain/`
-- Fake market data: `src/smm/data/fake.py` + `tests/fixtures/ohlcv/`
+- Universe snapshots: [`configs/universe/`](./configs/universe/) (dated, with survivorship disclaimer)
+- Domain types: `src/smm/domain/` — note the `AdjustedBar` / `TradeableBar` split
+- Synthetic market data: `src/smm/data/generator.py` (the generator is the truth source, not CSVs)
 - Research: `experiments/`, `notebooks/` (read-only analytics)
+
+**Price series:** constitution §12.1 requires two. Features read the adjusted
+view, fills and stops read the tradeable view, and the two views have
+non-overlapping attribute surfaces so mixing them is an `AttributeError` rather
+than a missed review.
 
 **Config hash:** SHA-256 of canonical JSON (`sort_keys`, compact separators) from the validated pydantic model — see `smm.config.loader`.
 

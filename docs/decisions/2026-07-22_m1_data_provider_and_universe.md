@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | **accepted**（rev.3；经 [PR #1](https://github.com/xxxxxthhh/swingMomentum/pull/1) 二次评审批准） |
+| 状态 | **accepted**（rev.4；[PR #1](https://github.com/xxxxxthhh/swingMomentum/pull/1) 批准，[PR #2](https://github.com/xxxxxthhh/swingMomentum/pull/2) 实测修订 §3.1 措辞） |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（**不 bump**；§2.4 新增 config 键仅改变 `config_hash`，划界见 §2.4） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§10 股票池、§11 数据字段、§12 数据使用原则） |
@@ -126,10 +126,12 @@ universe:
 
 | 字段 | 语义 | 是否持久化 |
 |------|------|-----------|
-| `open` / `high` / `low` / `close` | **未复权**、当时实际可交易价 | 是 |
-| `volume` | 成交量（拆股口径见 §3.4） | 是 |
+| `open` / `high` / `low` / `close` | **未复权**、当时实际可交易价 ⚠️ 见 §5.1 | 是 |
+| `volume` | 成交量（拆股口径见 §3.4、§5.2） | 是 |
 | `adj_close` | provider 提供的复权收盘价 | 是 |
 | `adj_factor` | `adj_close / close`（当日标量） | 是 |
+
+> ⚠️ **rev.4 修正：** 上表「未复权」一词对 yfinance **字面不成立**——实测其主序列为 split-adjusted, dividend-unadjusted。字段结构与消费边界不变，语义修正与 MVP-B 前置裁决见 **[§5 附录](#5-附录rev4yahoo-主序列的真实口径)**。
 
 **不**持久化 `adj_open` / `adj_high` / `adj_low`：它们是无信息增量的派生量，多存三列只会增加"两处不一致"的失败面。
 
@@ -196,6 +198,43 @@ M1 必须：
 **理由：** 硬过滤需要 SMA200 / Return_126 / 52 周高点，最少 252 根 bar；手写 CSV 在该长度下不可维护，且无法保证形态确实满足待测条件。Plan v1.1 §8 已将「黄金 synthetic」与「禁止用未来 bar 算信号日指标」列为最低测试集，生成器是它们的前置条件。
 
 生成的路径必须能支撑**无前视测试**：第 T 日的突破判定只允许消费 `date <= T` 的 bar。
+
+---
+
+### 5. 附录（rev.4）：Yahoo 主序列的真实口径
+
+> 本节由 [PR #2](https://github.com/xxxxxthhh/swingMomentum/pull/2) 的实测结果与二次评审裁决加入。**修正 §3.1 的一处措辞错误**，其余决策不变。
+
+§3.4 要求的实测已完成（NVDA 10:1 2024-06-10、AAPL 4:1 2020-08-31、TSLA 3:1 2022-08-25，`auto_adjust=False`）：
+
+| 序列 | 实测口径 |
+|------|----------|
+| `Close` / OHLC | **已拆股调整**（NVDA 拆股前收盘返回 120.888，非当时成交的 1208.88） |
+| `Volume` | **已拆股调整**，边界无跳变 |
+| `Adj Close` | 相对 `Close` 仅差**分红**（TSLA 不分红，跨拆股两者末位小数相同） |
+
+#### 5.1 措辞修正
+
+§3.1 把主字段称为「**未复权**、当时实际可交易价」。对本 provider **字面不成立**：它是 **split-adjusted, dividend-unadjusted**，不是审计级的「当日交易所成交 print」。
+
+代码中该序列继续承担 fill/stop 角色，但语义应表述为 **provider primary / tradeable series as delivered**，而非「历史 print」。`TradeableBar` 的命名暂不改动，以 docstring 承载该注意事项。
+
+**不变的部分：** 缺 `adj_close` 仍**禁止**用 `close` 顶替；§3.3 的消费边界不受影响（特征层只用 total-return 语义，不依赖真 print 价）。
+
+#### 5.2 §3.4 的假信号风险在本 provider 上不成立
+
+因成交量已预调整，20 日均量口径一致，不会凭空产生放量突破。**结论：** M2 可用同一 `volume` 序列计算 `relative_volume`；`check_split_artefacts` **保留为 provider 变更护栏**，而非修复现存缺陷。
+
+#### 5.3 MVP-B 前置裁决（未决，编码前必须选定）
+
+M1/M2 不受影响（特征层不依赖 print 价）。但 **MVP-B 的成交与止损不得假装已满足宪法 §12.1 字面要求**。二选一：
+
+| 方案 | 含义 |
+|------|------|
+| **A（评审推荐）** | 用 `actions=True` / `Stock Splits` **重建 true print OHLC** 专供 fill/stop；主缓存保留 provider 原生序列给特征。Paper 成交显式绑定「print 序列」 |
+| **B** | 修订宪法/ADR 措辞：V1 Paper 承认 fill/stop 使用 **split-adjusted share units**（持仓单位连续一致），并声明**非**历史 print 复现；正式结论前仍需独立公司行动源 |
+
+**明确不采纳：** 继续把 Yahoo 的 `Close` 称作「未复权真实成交价」而不改文档——那是会在 MVP-B 引爆的文档债。
 
 ---
 
@@ -307,3 +346,4 @@ M1 必须：
 | 2026-07-22 | proposed | M1 实现前提交评审 |
 | 2026-07-22 | proposed (rev.2) | 回应 PR #1 评审：9 项采纳 + 1 项作者补充（成交量拆股口径） |
 | 2026-07-22 | **accepted** (rev.3) | PR #1 二次评审批准；裁定维持快照 fail-closed、不 bump 策略版本；新增 §2.4 版本纪律划界 |
+| 2026-07-22 | **accepted** (rev.4) | PR #2 实测修正 §3.1 措辞（Yahoo 主序列为 split-adj/div-unadj）；确认 §3.4 风险在本 provider 不成立；新增 §5 附录与 MVP-B 前置裁决 |

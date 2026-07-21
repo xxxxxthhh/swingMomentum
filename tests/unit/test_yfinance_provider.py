@@ -33,8 +33,11 @@ def build(tmp_path: Path) -> YFinanceProvider:
 
 
 def test_universe_comes_from_the_dated_snapshot(tmp_path: Path) -> None:
-    provider = build(tmp_path)
-    assert "SPY" in provider.get_universe(date(2026, 7, 22))
+    universe = build(tmp_path).get_universe(date(2026, 7, 22))
+    assert {"AAPL", "MSFT", "BRK-B"} <= set(universe)
+    # SPY is a benchmark, not a constituent — §10 limits the universe to common
+    # stock. `smm ingest` fetches it separately.
+    assert "SPY" not in universe
 
 
 def test_universe_fails_closed_when_snapshot_is_stale(tmp_path: Path) -> None:

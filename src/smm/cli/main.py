@@ -153,6 +153,14 @@ def _ingest_market(
         max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
     )
     wanted = [s.upper() for s in symbols] if symbols else provider.get_universe(end)
+    # The benchmark is not a universe member — the universe is common stock only
+    # (constitution §10), and SPY is an ETF. It still has to be ingested: the
+    # market regime and the session calendar both read it, and without it the
+    # calendar check silently degrades to a no-op.
+    benchmark = loaded.config.market_regime.benchmark.upper()
+    if benchmark not in wanted:
+        wanted = [benchmark, *wanted]
+
     written: list[tuple[str, int]] = []
     for sym in wanted:
         bars = provider.get_daily_bars(sym, start, end)

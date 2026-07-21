@@ -11,6 +11,6 @@
 - [2026-07-21_phase1_scope_and_stack.md](./2026-07-21_phase1_scope_and_stack.md)（accepted；§1 技术栈有效，§2/§3 部分被后续 ADR 修订）
 - [2026-07-22_phase1_mvp_slicing_v1_1.md](./2026-07-22_phase1_mvp_slicing_v1_1.md)（accepted）— 两阶段 MVP 与 V1 规则边界
 - [2026-07-22_phase0_repo_foundation.md](./2026-07-22_phase0_repo_foundation.md)（accepted）— Phase 0 domain/config/fixtures/CI
-- [2026-07-22_m1_data_provider_and_universe.md](./2026-07-22_m1_data_provider_and_universe.md)（proposed）— M1 数据源、股票池快照、Bar 双价格表示、fixture 生成器
+- [2026-07-22_m1_data_provider_and_universe.md](./2026-07-22_m1_data_provider_and_universe.md)（accepted）— M1 数据源、股票池快照、Bar 双价格表示、fixture 生成器
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

@@ -9,9 +9,6 @@ from pathlib import Path
 from smm.core.errors import DataValidationError
 from smm.domain.models import Bar
 
-# tests/fixtures/ohlcv relative to repo root
-_DEFAULT_FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "ohlcv"
-
 
 class FakeProvider:
     """Load bars from CSV files under a fixtures directory.
@@ -24,15 +21,19 @@ class FakeProvider:
     substituting ``close`` for a missing ``adj_close`` is exactly what ADR
     2026-07-22 §3.3 forbids. Fixtures with no corporate action state
     ``adj_factor=1.0`` explicitly.
+
+    ``fixtures_dir`` is required. The committed CSVs it used to default to were
+    removed in favour of :mod:`smm.data.generator` (ADR §4.1), so a default
+    would only ever point at nothing.
     """
 
     def __init__(
         self,
-        fixtures_dir: Path | str | None = None,
+        fixtures_dir: Path | str,
         *,
         universe: list[str] | None = None,
     ) -> None:
-        self._dir = Path(fixtures_dir) if fixtures_dir else _DEFAULT_FIXTURES
+        self._dir = Path(fixtures_dir)
         self._bars_by_symbol: dict[str, list[Bar]] = {}
         self._load_all()
         if universe is not None:

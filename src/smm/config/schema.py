@@ -174,6 +174,25 @@ class ExecutionSection(BaseModel):
     max_open_gap_atr: float = Field(gt=0)
 
 
+class ValidationSection(BaseModel):
+    """Data-quality thresholds (constitution §12.4).
+
+    These are data-governance guards, not strategy rules: changing them moves
+    ``config_hash`` but does not bump the strategy version (ADR §2.4). They live
+    here rather than in code because ADR §「对 M1 实现的约束」 §6 forbids
+    hardcoding "how big a jump is abnormal" in business logic.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_abs_daily_return: float = Field(gt=0, le=10)
+    max_volume_spike_ratio: float = Field(gt=1)
+    max_session_gap_weekdays: int = Field(ge=0)
+    min_adj_factor: float = Field(gt=0, le=1)
+    adj_factor_tolerance: float = Field(gt=0, lt=1)
+    split_ratio_tolerance: float = Field(gt=0, lt=1)
+
+
 class StrategyConfig(BaseModel):
     """Root strategy configuration (frozen YAML)."""
 
@@ -181,6 +200,7 @@ class StrategyConfig(BaseModel):
 
     strategy: StrategySection
     universe: UniverseSection
+    validation: ValidationSection
     market_regime: MarketRegimeSection
     hard_filters: HardFiltersSection
     momentum: MomentumSection

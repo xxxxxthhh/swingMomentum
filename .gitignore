@@ -36,10 +36,11 @@ secrets/
 Thumbs.db
 
 # Project data & runtime artifacts (large / local)
-data/
-!data/.gitkeep
-reports/
-!reports/.gitkeep
+# Only ignore repo-root market data dirs — not src/smm/data/ package code
+/data/
+!/data/.gitkeep
+/reports/
+!/reports/.gitkeep
 *.sqlite
 *.db
 *.parquet

@@ -44,7 +44,7 @@ RS_Sector_63 = Return_63_stock - Return_63_sectorETF
 
 ```yaml
 sector_benchmarks:
-  technology: XLK
+  information_technology: XLK
   financials: XLF
   health_care: XLV
   consumer_discretionary: XLY
@@ -56,6 +56,10 @@ sector_benchmarks:
   real_estate: XLRE
   communication_services: XLC
 ```
+
+**板块键为冻结枚举**，取 GICS 全名的 snake_case 形式，与 [PR #7](https://github.com/xxxxxthhh/swingMomentum/pull/7) 写入快照 `sector` 列的取值**逐字一致**。本节初稿写的是 `technology`，与快照的 `information_technology` 不符——键一旦不一致，整个 IT 板块会被标成 `rs_sector_missing` 并集体消失于候选。已按 PR #7 评审裁决统一。
+
+**板块 ETF 不是股票池成员**（宪法 §10 限定普通股）。它们与 `market_regime.benchmark` 一样，必须由 ingest 路径显式拉取，且**不得**写入快照。
 
 **理由：** 合成中位数会让基准随股票池组成漂移，且无法与任何可交易标的对账；ETF 收益是真实发生的、可审计的。映射表进 config 而非代码，符合参数纪律。
 
@@ -196,7 +200,7 @@ features:
 
 | 项 | 归属 | 说明 |
 |----|------|------|
-| `sector` 分类体系 | #3 | 建议 GICS 11 板块；需与 `sector_benchmarks` 键一致 |
+| Nasdaq-only 成分的板块 | M2 后 | PR #7 实测：ICB→GICS 映射错误率 27%，故这 15 只留空。按 §2 它们会被 `rs_sector_missing` 排除，直到接入覆盖它们的真实 GICS 源 |
 | 空日历是否 fail-closed | [#5](https://github.com/xxxxxthhh/swingMomentum/issues/5) | M1 遗留；影响 regime 的日历校验强度 |
 | 板块 ETF 自身的历史不足 | M2 实现 | 11 只 ETF 均有十年以上历史，实践中不触发；仍按 §3 规则处理 |
 

@@ -1,0 +1,11 @@
+# Experimental config variant.
+# Prefer copying from configs/smm_v1_0_0.yaml and documenting deltas in result.md.
+# This file is NOT the execution default.
+
+strategy:
+  name: Swing Momentum Scanner
+  version: SMM-V1.0.0-exp-template
+  direction: long_only
+  timeframe: daily
+  execution_mode: paper_trading
+  auto_live_orders: false

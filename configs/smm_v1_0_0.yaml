@@ -1,0 +1,93 @@
+# SMM-V1.0.0 frozen execution parameters
+# Source: specs Part 20 + Phase 1 plan v1.1 + Phase 0 ADR (fund as filter, minimal setup)
+# Changes require strategy version discipline and must not overwrite historical runs.
+
+strategy:
+  name: Swing Momentum Scanner
+  version: SMM-V1.0.0
+  direction: long_only
+  timeframe: daily
+  execution_mode: paper_trading
+  auto_live_orders: false
+
+universe:
+  primary:
+    - SP500
+    - NASDAQ100_UNIQUE
+  min_price: 10.0
+  min_avg_dollar_volume_20d: 20000000.0
+
+market_regime:
+  benchmark: SPY
+  risk_on_conditions:
+    - close_above_sma_200
+    - close_above_sma_50
+    - sma_50_above_sma_200
+
+hard_filters:
+  rules:
+    - close_above_sma_50
+    - close_above_sma_200
+    - sma_50_above_sma_200
+    - return_63_positive
+    - return_126_positive
+    - within_15_percent_of_52w_high
+  max_distance_from_52w_high: 0.15
+
+momentum:
+  return_21_weight: 0.20
+  return_63_weight: 0.30
+  return_126_weight: 0.50
+
+relative_strength:
+  rs_spy_63_weight: 0.40
+  rs_spy_126_weight: 0.40
+  rs_sector_63_weight: 0.20
+
+scoring:
+  # V1: momentum-first; fundamental is filter, not primary score driver
+  fund_as_filter: true
+  momentum_weight: 0.50
+  relative_strength_weight: 0.30
+  trend_trigger_weight: 0.20
+  fundamental_weight: 0.0
+
+signal:
+  breakout_window: 20
+  relative_volume_min: 1.30
+  watchlist_expire_bars: 20
+  extension_filter_enabled: true
+  max_extension_atr: 2.5
+
+earnings:
+  block_new_entries_before_days: 5
+  hold_through_earnings: false
+
+stop:
+  type: setup_low_minus_atr_buffer
+  atr_buffer: 0.20
+  min_stop_distance_atr: 1.0
+  max_stop_distance_atr: 2.5
+
+risk:
+  risk_on_per_trade: 0.0050
+  neutral_per_trade: 0.0025
+  risk_off_per_trade: 0.0
+  max_position_capital: 0.15
+  max_portfolio_heat: 0.04
+  max_sector_risk: 0.015
+  max_risk_cluster_risk: 0.02
+  risk_on_max_exposure: 1.0
+  neutral_max_exposure: 0.5
+  risk_off_max_exposure: 0.25
+
+exit:
+  fixed_profit_target: false
+  time_stop_days: 10
+  time_stop_min_mfe_r: 0.5
+  trailing_exit: close_below_ema_20
+  pyramiding: false
+
+execution:
+  next_day_open: true
+  max_open_gap_atr: 1.0

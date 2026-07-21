@@ -33,6 +33,24 @@ Start here: **[docs/README.md](./docs/README.md)**
 - Core types are **domain objects** (Signal / Order / Position / Trade), not only DataFrames
 - Research goes through **experiments/**; notebooks are read-only analytics
 
+## Development (Phase 0)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+pytest -q
+smm show-config
+smm version
+```
+
+- Strategy parameters: [`configs/smm_v1_0_0.yaml`](./configs/smm_v1_0_0.yaml)
+- Domain types: `src/smm/domain/`
+- Fake market data: `src/smm/data/fake.py` + `tests/fixtures/ohlcv/`
+- Research: `experiments/`, `notebooks/` (read-only analytics)
+
+**Config hash:** SHA-256 of canonical JSON (`sort_keys`, compact separators) from the validated pydantic model — see `smm.config.loader`.
+
 ## License / disclaimer
 
 This repository is for personal research and engineering practice. Nothing here is investment advice. Past rules or simulated results do not guarantee future performance.

@@ -206,3 +206,37 @@ def test_circuit_state_rejects_drawdown_inconsistent_with_equity_facts() -> None
 
     with pytest.raises(ValidationError, match="drawdown must match equity facts"):
         CircuitState(**values)
+
+
+def test_circuit_state_rejects_stop_and_reduce_reasons_together() -> None:
+    result = evaluate()
+    values = result.model_dump()
+    values["reason_codes"] = (
+        "circuit_drawdown_stop_new_entries",
+        "circuit_drawdown_reduce_risk",
+    )
+
+    with pytest.raises(ValidationError, match="stop and reduction cannot both apply"):
+        CircuitState(**values)
+
+
+def test_circuit_state_rejects_reason_codes_out_of_stable_priority_order() -> None:
+    result = evaluate()
+    values = result.model_dump()
+    values["reason_codes"] = (
+        "circuit_drawdown_stop_new_entries",
+        "circuit_data_or_position_integrity_halt",
+    )
+
+    with pytest.raises(ValidationError, match="stable priority order"):
+        CircuitState(**values)
+
+
+def test_circuit_state_rejects_block_flag_inconsistent_with_stop_reason() -> None:
+    result = evaluate()
+    values = result.model_dump()
+    values["new_entries_blocked"] = False
+    values["reason_codes"] = ("circuit_drawdown_stop_new_entries",)
+
+    with pytest.raises(ValidationError, match="entry block must match circuit reasons"):
+        CircuitState(**values)

@@ -29,6 +29,35 @@ validation:
   adj_factor_tolerance: 0.000001
   split_ratio_tolerance: 0.03       # how near an integer ratio counts as a split step
 
+# Feature windows (ADR M2). Governance-adjacent but strategy-shaping: these
+# define what the indicators mean, so a change moves config_hash.
+features:
+  min_history_bars: 252     # 52-week high is the binding window
+  sma_fast: 50
+  sma_slow: 200
+  ema_window: 20
+  atr_window: 20
+  slope_window: 20
+  return_windows: [21, 63, 126]
+  high_window: 252
+  drawdown_window: 63
+  dollar_volume_window: 20
+
+# Constitution §18.2: sector RS is measured against a real sector ETF, not a
+# synthetic peer median. Keys must match the snapshot's `sector` column exactly.
+sector_benchmarks:
+  information_technology: XLK
+  financials: XLF
+  health_care: XLV
+  consumer_discretionary: XLY
+  consumer_staples: XLP
+  energy: XLE
+  industrials: XLI
+  materials: XLB
+  utilities: XLU
+  real_estate: XLRE
+  communication_services: XLC
+
 market_regime:
   benchmark: SPY
   risk_on_conditions:

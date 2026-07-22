@@ -324,8 +324,10 @@ class StrategyConfig(BaseModel):
     execution: ExecutionSection
 
     @model_validator(mode="after")
-    def v1_1_requires_m6_execution_contract(self) -> StrategyConfig:
-        if self.strategy.version != "SMM-V1.1.0":
+    def post_v1_0_requires_m6_execution_contract(self) -> StrategyConfig:
+        # V1.0.0 predates this frozen execution contract. Every successor
+        # identity must carry it explicitly; none may fall back to defaults.
+        if self.strategy.version == "SMM-V1.0.0":
             return self
 
         required = {

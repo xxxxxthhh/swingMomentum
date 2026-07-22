@@ -112,6 +112,15 @@ def test_v1_1_rejects_missing_m6_required_keys(section: str, key: str) -> None:
         load_config_from_mapping(raw)
 
 
+def test_post_v1_0_versions_reject_missing_m6_required_keys() -> None:
+    raw = _m6_mapping()
+    raw["strategy"]["version"] = "SMM-V1.2.0"
+    del raw["execution"]["half_spread_bps"]
+
+    with pytest.raises(ConfigError, match="M6 config keys"):
+        load_config_from_mapping(raw)
+
+
 @pytest.mark.parametrize(
     ("section", "key", "value", "message"),
     [

@@ -13,8 +13,8 @@ from smm.data.generator import (
 # be a deliberate, reviewed act — every downstream fixture expectation moves
 # with it.
 GOLDEN_DIGESTS = {
-    "breakout_success": "20852690c78f7089a24425629a2282452fd96acb3e4f1510562cd9cc4c444a20",
-    "false_breakout": "58f44c421ad31c5189df77698b2c4a9ab953cad1a74298b10ff24c543a2d9bc0",
+    "breakout_success": "5ca6ceec4fd4af1bcd62e48d6476c42f2510b0381f0f5b0499a2e78c778b428a",
+    "false_breakout": "8a8ff125338cbb656ecbcfd666c009312a1e1025ce4aae55105f640b86f46764",
     "risk_off_spy": "1897475c1599e7e416a0c837b5d923be6787772cba838e90fb7d8d5919425fe9",
 }
 
@@ -91,6 +91,21 @@ def test_breakout_success_triggers_and_follows_through() -> None:
     assert _triggers(history)
     level = max(b.high for b in bars[i - 20 : i])
     assert bars[i + 5].close > level
+
+
+def test_breakout_fixtures_respect_the_frozen_extension_guard() -> None:
+    """Both paths must be eligible on the trigger day; only their future differs."""
+    from smm.config.loader import load_config
+    from smm.features.engine import compute_features
+
+    loaded = load_config()
+    for build in (breakout_success, false_breakout):
+        path = build()
+        assert path.breakout_index is not None
+        as_of = path.bars[path.breakout_index].date
+        feature = compute_features(path.bars, as_of=as_of, cfg=loaded.config.features)
+        assert feature.extension_atr is not None
+        assert feature.extension_atr <= loaded.config.signal.max_extension_atr
 
 
 def test_false_breakout_is_indistinguishable_on_the_trigger_day() -> None:

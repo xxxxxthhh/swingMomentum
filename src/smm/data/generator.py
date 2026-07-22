@@ -172,7 +172,10 @@ def breakout_success(
             symbol,
             days[breakout_index],
             prev_close=prev_close,
-            close=level * 1.035,
+            # Clear the level without violating the frozen 2.5 ATR extension
+            # guard. A "success" fixture that only passed the breakout/volume
+            # subset would teach the scanner a contract the config rejects.
+            close=level * 1.005,
             volume=avg_volume * 1.9,
             wiggle=0.004,
         )
@@ -237,7 +240,10 @@ def false_breakout(
             symbol,
             days[breakout_index],
             prev_close=bars[-1].close,
-            close=level * 1.02,
+            # Match the successful path's legal extension: only the bars after
+            # this session may distinguish a false breakout from a successful
+            # one (the no-lookahead contract).
+            close=level * 1.005,
             volume=avg_volume * 1.7,
             wiggle=0.004,
         )

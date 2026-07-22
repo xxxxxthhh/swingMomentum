@@ -67,6 +67,32 @@ PrintBar[d].volume = provider_primary[d].volume / split_factor(d)
 - retrieval 时点晚于历史 `as_of` 的 Yahoo 资料不是 point-in-time 回测证据。M6 可服务当前 Paper 日任务的审计重放；研究/历史回测仍受 M1 §1.1 的非 PIT 限制，不能借“已重建 PrintBar”取消该限制。
 - `PrintBar`、actions、或二者与 provider session 不一致时，停止该 symbol 的 Paper 动作并生成可审计的 data-integrity halt；绝不退回 split-adjusted primary OHLC。
 
+#### 2.1 持仓跨拆分必须先重标单位，不能把正常拆分当成止损
+
+`PrintBar` 在 action-date 已是拆分后的 share unit。因此，在处理该 session 的
+open、stop、MFE/MAE 或 marked equity **之前**，每一个跨越该 action-date 的
+open position 必须以同一已验证 `split_ratio` 重标：
+
+```text
+qty'                    = qty × split_ratio
+entry_fill'             = entry_fill / split_ratio
+initial_stop'           = initial_stop / split_ratio
+initial_unit_risk'      = initial_unit_risk / split_ratio
+MFE/MAE price anchors'  = prior anchors / split_ratio
+```
+
+M6 必须写入 append-only 的 `paper_position_corporate_action` 记录，至少含
+`position_id`、action-date、split ratio、重标前/后的 qty 与全部价格锚点、
+provider action identity、strategy/config identity。其业务键为
+`(position_id, action_date, action_identity)`；同键不同载荷即冲突。
+
+这是**单位归一化**，不是主观或不利地移动 stop：`qty × entry_fill`、
+`qty × initial_stop` 与总初始 R 在重标前后保持经济等值，且没有任一交易的
+止损百分比被放宽。故它是宪法 §12.1 所要求的拆分映射，并不违反 §29 的
+“止损不能向不利方向移动”。缺少、重复、无法对账或不属于 open position 的
+action 一律触发 data-integrity halt；不得略过重标后直接拿 post-split
+`PrintBar` 与旧单位的仓位比较。
+
 ### 3. 成本模型必须先在新的冻结 config identity 中给出；本 ADR 不猜数值
 
 宪法要求真实成本进入模拟，M5 也拒绝零成本候选。现有 `smm_v1_0_0.yaml` 没有成本和熔断数值，因此 M6 实现前必须新增一个**新的、不可覆盖历史的** config identity（推荐策略版本也随执行/风险语义评审决定）并由 schema 要求至少：
@@ -84,7 +110,7 @@ risk:
   drawdown_stop_at: <0..1 Decimal>
 ```
 
-数值必须来自这份新 config，不能在 Broker 代码、测试 helper 或环境变量中隐含默认。`entry_slippage_bps`、`exit_slippage_bps`、`half_spread_bps` 的精确值在本 ADR 中故意不伪造为“市场事实”；在 PR 评审中先确认保守值及版本纪律。`drawdown_reduce_at < drawdown_stop_at`、所有 bps 非负、以及所有 required keys 缺失即 schema fail closed。
+数值必须来自这份新 config，不能在 Broker 代码、测试 helper 或环境变量中隐含默认。三项 bps 都必须严格 `> 0`，`commission_per_share` 可为 `>= 0`；这保证 M5 所需的 entry 与 round-trip cost 为正，不允许全零成本 config 伪装成可执行策略。三项 bps 的精确数值在本 ADR 中故意不伪造为“市场事实”；在 PR 评审中先确认保守值及版本纪律。`drawdown_reduce_at < drawdown_stop_at`，以及任一 required key 缺失，均 schema fail closed。
 
 在数值冻结后，日线模型固定为：
 
@@ -139,10 +165,16 @@ EMA 条件是 feature 条件，不是成交价格：它只能比较同日 `Adjus
 
 ```text
 MFE_R < exit.time_stop_min_mfe_r
-and adjusted close < actual entry fill
+and TradeableBar.close < actual entry fill
 ```
 
-才安排下一开盘 exit，reason `paper_exit_time_stop`。`MFE_R` 使用从 entry session 至当前 session 的 `PrintBar.high` 和初始、不可上调的 per-share R（包含同一版本的预计 round-trip cost）计算。宪法中的“relative strength 明显恶化”目前没有冻结 metric，V1 不把它悄悄实现为另一个 exit；未来需单独 ADR/config。
+才安排下一开盘 exit，reason `paper_exit_time_stop`。两个 conjunct 都在同一 true-print
+share unit：`TradeableBar.close` 与已经过 §2.1 重标的 actual entry fill；不得将
+`AdjustedBar.adj_close`、dividend adjustment 或任何 provider primary 值拿来与 fill
+直接比较。`MFE_R` 使用从 entry session 至当前 session 的 `PrintBar.high` 和初始、
+不可上调的 per-share R（包含同一版本的预计 round-trip cost）计算。宪法中的“relative
+strength 明显恶化”目前没有冻结 metric，V1 不把它悄悄实现为另一个 exit；未来需单独
+ADR/config。
 
 同一日 stop 与 close condition 同时成立时，stop 先终结 position，不能再排 EMA/time exit。已有前一日安排的开盘 exit 又遇见低开时，先执行该 exit open；日线数据不足以假设一个更优的盘中止损顺序。
 
@@ -156,6 +188,13 @@ ACTIVE        -> EXITED | STOPPED
 ```
 
 `ENTERED -> ACTIVE` 仅表示仓位经过一个完成 session 后仍存续；terminal transition 必须由 paper trade/order 记录的日期与 reason 支撑。
+M7 实施必须同时把下列 edge 加入 `ALLOWED_SIGNAL_TRANSITIONS`；不能仅依靠本 ADR 的
+文字映射：
+
+```text
+RISK_ACCEPTED -> STOPPED
+ENTERED -> EXITED | STOPPED
+```
 
 ### 6. Paper ledger 与 idempotency 业务键
 
@@ -166,6 +205,7 @@ M6 定义 append-only、可重放的 records；具体 SQLite/Parquet storage 选
 | `paper_orders` | signal、purpose、scheduled session、planned/actual qty、status、reason codes、identity | `(signal_id, purpose, scheduled_session, config_hash)` |
 | `paper_fills` | order、actual session、true-print base price、cost components、fill price、qty | `(paper_order_id, fill_session)` |
 | `paper_positions` | entry fill、initial stop、qty、open/closed status、identity | `position_id` derived from entry `paper_order_id` |
+| `paper_position_corporate_action` | split action、重标前/后 qty 与 entry/stop/R/MFE/MAE anchors、provider action identity | `(position_id, action_date, action_identity)` |
 | `paper_trades` | entry/exit fills、realized P&L/R、MFE/MAE、exit reason | `position_id` |
 | `paper_equity_snapshots` | cash、marked equity、high-water mark、drawdown、circuit outcome | `(as_of, config_hash)` |
 | `manual_decisions` | target signal/order、SKIP、reason、note、actor, as_of、identity | `(target_id, decision, as_of, config_hash)` |
@@ -187,7 +227,7 @@ new_entries_blocked, entry_risk_multiplier, reason_codes
 
 - session realized loss 是该 session 内已平仓 paper trade 的 realized R 之和；小于 `-daily_loss_pause_r` 时，**下一** session 阻止新 entry，reason `circuit_daily_loss_pause`。
 - marked equity = settled cash + 所有 open position 的 `qty * current PrintBar.close` 减去按同一 config 立即卖出的成本；high-water 只可上升。drawdown = `(high_water - marked_equity) / high_water`。
-- drawdown 到达 `drawdown_reduce_at` 而未到 stop threshold 时，输出 `entry_risk_multiplier = 0.5` 与 `circuit_drawdown_reduce_risk`。M7 必须把该显式 operational multiplier 作为 risk input 传给 M5 的 sizing seam 并记录它；不得复制/修改 config hash，也不得让 Scanner 直接决定 quantity。
+- drawdown 到达 `drawdown_reduce_at` 而未到 stop threshold 时，输出 `entry_risk_multiplier = 0.5` 与 `circuit_drawdown_reduce_risk`。M7 必须以新增、显式的 `RiskExecutionContext(entry_risk_multiplier, circuit_state_identity)`（或同等命名）**追加**到 M5 sizing seam；它不得改写已冻结 `RiskSection`、`config_hash` 或由 Scanner 直接决定 quantity。M7 同时必须把 multiplier 与 circuit-state identity 写进 risk decision/audit 事实；禁止用 `model_copy` 生成一份未记录的“减半 config”。
 - drawdown 到达 `drawdown_stop_at` 时，输出 `new_entries_blocked = true`、`entry_risk_multiplier = 0`、`circuit_drawdown_stop_new_entries`，并要求 audit record；不自动清算既有仓位。
 - data、actions、ledger 或 position reconciliation 不一致时，输出最高优先级 `circuit_data_or_position_integrity_halt`，立即阻止新 entry；不虚构 exit price。
 
@@ -198,12 +238,14 @@ new_entries_blocked, entry_risk_multiplier, reason_codes
 M6 代码前先提交针对下列契约的 red tests，再实现最小模块：
 
 1. known-split `actions` 重建为 `PrintBar`；缺 action、action-date 边界错误或 provider `Bar` 进入 fill seam 均 fail closed。
-2. 计划 entry 用次日 true-print open；过大 gap、open at/below stop、stop-distance 越界均取消且不占 cash。
-3. actual-open re-risk 只能缩量/取消，不能超过 M5 planned quantity；同批次仍不超 heat/sector/cluster。
-4. entry 后同日 low 穿 stop 与 gap-through-stop 分别按指定 base price；止损不下移。
-5. EMA 使用 adjusted close/EMA、fill 使用 next-session PrintBar open；time stop 的 10-session/MFE 条件与 stop 优先级正确，未定义 RS 条件不触发 exit。
-6. 订单、fill、仓位、trade、manual SKIP 与 equity snapshot 完全重跑 no-op；同 key 不同 payload fail closed。
-7. 4R 日损失、6% risk reduction、10% stop、data/position mismatch 的 circuit state 与 stable reason codes 正确；CircuitState 不能被 Scanner 绕过。
+2. 持仓跨 known split 时，action-date open 前写入唯一 `paper_position_corporate_action`；qty 与全部 price/R anchors 的重标保持 notional/initial-R 经济等值，既不 phantom stop 也不 phantom drawdown。
+3. 计划 entry 用次日 true-print open；过大 gap、open at/below stop、stop-distance 越界均取消且不占 cash。
+4. actual-open re-risk 只能缩量/取消，不能超过 M5 planned quantity；同批次仍不超 heat/sector/cluster。
+5. entry 后同日 low 穿 stop 与 gap-through-stop 分别按指定 base price；止损不下移。
+6. EMA 使用 adjusted close/EMA、fill 使用 next-session PrintBar open；time stop 的 10-session/MFE 条件及其 true-print close/entry 比较与 stop 优先级正确，未定义 RS 条件不触发 exit。
+7. M7 的 lifecycle edge 与 M5 additive `RiskExecutionContext` 均有 focused regression；不得以 mutable/derived config 实现 circuit multiplier。
+8. 订单、fill、仓位、corporate-action、trade、manual SKIP 与 equity snapshot 完全重跑 no-op；同 key 不同 payload fail closed。
+9. 4R 日损失、6% risk reduction、10% stop、data/position mismatch 的 circuit state 与 stable reason codes 正确；CircuitState 不能被 Scanner 绕过。
 
 发布前仍运行目标测试、完整 pytest、ruff 与 `git diff --check`。M6 不更新 M4 run-daily manifest；M7 才负责以这个已验证 seam 连接 M5 decision、M3 transition store 和 `run_daily --mode shadow|paper`。
 
@@ -214,6 +256,7 @@ M6 代码前先提交针对下列契约的 red tests，再实现最小模块：
 | 方案 | 原因 |
 |------|------|
 | 直接把 provider-native Yahoo OHLC 用作 paper fill | 违反 M1 已接受的 `PrintBar` 类型边界，拆股前历史价格错误。 |
+| 跨拆分继续使用旧 qty/entry/stop 与 post-split `PrintBar` 比较 | 会制造 phantom stop、虚假回撤与错误现金占用；必须先有可审计单位重标。 |
 | 缺成本时按 0 或任意 bps 继续 | 违反宪法 §10 与 M5 成本契约，且把未审计假设变成风险结论。 |
 | entry 用 signal close 或 future high/low 作为 fill | 违反无前视和次日开盘成交规则。 |
 | 同日 entry/stop 写两条 signal transition | 违反 M3 `(signal_id, as_of)` 一日一跳不变量。 |
@@ -229,3 +272,4 @@ M6 代码前先提交针对下列契约的 red tests，再实现最小模块：
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-22 | proposed | M5 实现合并后提出 M6 真实成交、成本、退出、ledger、manual 与熔断契约；等待 Task Reviewer 裁定成本/熔断 config identity 与语义。 |
+| 2026-07-22 | proposed (rev.2) | 回应 PR #23 Task Reviewer comment `5048219003`：持仓跨拆分的可审计单位重标、time-stop true-print 比较、M7 lifecycle edge、成本严格正值与 additive circuit-risk context。 |

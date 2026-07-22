@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed |
+| 状态 | accepted (rev.2) |
 | 日期 | 2026-07-22 |
 | 策略版本 | 不在本 ADR 中变更；M6 实现前必须以新的冻结 config identity 固化尚缺的成本与熔断参数 |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§12.1、§24、§26、§29、§31、§35、§36、§53） |
@@ -23,7 +23,7 @@ M5 已交付纯 `RiskDecision` seam，但它刻意不创建 order、fill、posit
 4. M3 对每个 `(signal_id, as_of)` 最多允许一条 lifecycle transition。entry 当天又止损时，不能用两条 signal transition 伪造一个日内序列。
 5. 宪法写了日损失、回撤、数据不一致熔断，但没有定义其净值口径、优先级或怎样把“单笔风险减半”传给不应被绕过的 M5 风险引擎。
 
-本 ADR 的保守选择是先把这些 seam 写成可测试契约；在 Task Reviewer 接受、并把缺失执行参数写进新的冻结 config identity 前，不实施 Paper Broker。这样不会以“paper”为名把 provider-native 价格或猜测性成本带入结果。
+本 ADR 的保守选择是先把这些 seam 写成可测试契约；本契约已经 Task Reviewer 接受，但在把缺失执行参数写进新的冻结 config identity 前，仍不实施 Paper Broker。这样不会以“paper”为名把 provider-native 价格或猜测性成本带入结果。
 
 ---
 
@@ -273,3 +273,4 @@ M6 代码前先提交针对下列契约的 red tests，再实现最小模块：
 |------|------|------|
 | 2026-07-22 | proposed | M5 实现合并后提出 M6 真实成交、成本、退出、ledger、manual 与熔断契约；等待 Task Reviewer 裁定成本/熔断 config identity 与语义。 |
 | 2026-07-22 | proposed (rev.2) | 回应 PR #23 Task Reviewer comment `5048219003`：持仓跨拆分的可审计单位重标、time-stop true-print 比较、M7 lifecycle edge、成本严格正值与 additive circuit-risk context。 |
+| 2026-07-22 | accepted (rev.2) | PR #23 Task Reviewer comment `5048338346` 接受 exact head `98a1d8b`；契约已接受，但 Broker 实现仍必须等待 SMM-V1.1.0 config PR 接受。 |

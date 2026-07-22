@@ -46,7 +46,9 @@ class LoadedConfig:
 
 def compute_config_hash(config: StrategyConfig) -> str:
     """Return SHA-256 hex digest of canonical JSON for ``config``."""
-    payload = config.model_dump(mode="json")
+    # Optional M6 fields are absent from the frozen V1.0 YAML. Excluding their
+    # ``None`` placeholders preserves the historical V1.0 config identity.
+    payload = config.model_dump(mode="json", exclude_none=True)
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

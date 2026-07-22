@@ -18,7 +18,7 @@ Personal **Swing Momentum** trading system: constitution-driven rules, daily sca
 
 ---
 
-**Implementation status:** Phase 0, M1 market data, and M2 features/regime are complete. The M3 lifecycle contract is accepted; next is Watchlist + Trigger + signal persistence, followed by the M4 MVP-A daily report. **No live auto-trading.**
+**Implementation status:** Phase 0 and M1–M3 are complete. The M4 signal-report and daily-task contract is under ADR review before implementation. **No live auto-trading.**
 
 ## Docs map
 

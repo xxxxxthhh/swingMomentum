@@ -106,6 +106,11 @@ def test_quote_rejects_non_order_side() -> None:
         quote(side="buy")
 
 
+def test_quote_rejects_non_execution_section() -> None:
+    with pytest.raises(DataValidationError, match="ExecutionSection"):
+        quote(side=OrderSide.BUY, execution=None)
+
+
 @pytest.mark.parametrize(
     "field",
     [

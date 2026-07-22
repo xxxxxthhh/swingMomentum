@@ -243,6 +243,107 @@ def test_fetch_split_action_history_fails_closed_for_unverifiable_action_frames(
         )
 
 
+def test_fetch_split_action_history_rejects_unexpected_provider_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_yfinance(
+        monkeypatch,
+        _ActionFrame(
+            [
+                (date(2024, 6, 7), {"Stock Splits": 0.0}),
+                (date(2024, 6, 10), {"Stock Splits": 0.0}),
+            ]
+        ),
+    )
+
+    with pytest.raises(DataValidationError, match="unexpected provider sessions"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 7),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 7),),
+        )
+
+
+def test_fetch_split_action_history_rejects_inverted_request_interval(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="start must not be after end"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 10),
+            date(2024, 6, 7),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 7),),
+        )
+
+
+def test_fetch_split_action_history_rejects_cutoff_before_requested_end(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="cutoff must cover requested end"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 9),
+            expected_sessions=(date(2024, 6, 7),),
+        )
+
+
+def test_fetch_split_action_history_rejects_non_finite_split_ratio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_yfinance(
+        monkeypatch,
+        _ActionFrame(
+            [
+                (date(2024, 6, 7), {"Stock Splits": float("nan")}),
+                (date(2024, 6, 10), {"Stock Splits": 0.0}),
+            ]
+        ),
+    )
+
+    with pytest.raises(DataValidationError, match="non-finite"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 7), date(2024, 6, 10)),
+        )
+
+
+def test_fetch_split_action_history_rejects_empty_expected_sessions(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="non-empty expected sessions"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(),
+        )
+
+
+def test_fetch_split_action_history_rejects_duplicate_expected_session(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="duplicate expected split-history session"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 7), date(2024, 6, 7)),
+        )
+
+
+def test_fetch_split_action_history_rejects_out_of_range_expected_session(tmp_path: Path) -> None:
+    with pytest.raises(DataValidationError, match="outside split-history query"):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 6),),
+        )
+
+
 # --- network: the ADR §3.4 verification ----------------------------------
 
 

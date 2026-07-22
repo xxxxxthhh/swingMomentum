@@ -173,6 +173,152 @@ def _ingest_market(
     return written
 
 
+@app.command("features")
+def features_cmd(
+    as_of: Annotated[str, typer.Option("--as-of", help="Session date (YYYY-MM-DD)")],
+    source: Annotated[
+        Source,
+        typer.Option("--source", help="synthetic runs fully offline; market hits yfinance"),
+    ] = Source.SYNTHETIC,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("data/cache"),
+    out_dir: Annotated[Path, typer.Option("--out-dir")] = Path("data/features"),
+    top: Annotated[int, typer.Option("--top", help="Rows to print")] = 10,
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+) -> None:
+    """Compute features, market regime and the scored cross-section for ``--as-of``."""
+    try:
+        loaded = load_config(config_path)
+    except ConfigError as exc:
+        typer.secho(f"config error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        session = date.fromisoformat(as_of)
+    except ValueError as exc:
+        typer.secho(f"--as-of must be YYYY-MM-DD, got {as_of!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        run, written = _run_features(loaded, session, source, cache_dir, out_dir)
+    except FailClosedError as exc:
+        typer.secho(f"fail-closed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    cs = run.cross_section
+    typer.echo(f"as_of: {run.as_of}  regime: {run.regime.value}  source: {source.value}")
+    typer.echo(f"version: {loaded.version}  config_hash: {loaded.config_hash}")
+    typer.echo(
+        f"ranked: {len(cs.ranking_universe)}  scored: {len(cs.candidates)}  "
+        f"excluded: {len(run.excluded)}"
+    )
+    ordered = sorted(cs.candidates, key=lambda s: -(s.momentum_score or 0.0))
+    if ordered:
+        typer.echo(f"{'symbol':<8}{'sector':<24}{'mom':>7}{'rs':>7}")
+        for row in ordered[:top]:
+            typer.echo(
+                f"{row.symbol:<8}{str(row.sector):<24}"
+                f"{row.momentum_score:7.1f}{row.relative_strength_score:7.1f}"
+            )
+    else:
+        typer.secho("no scored candidates", fg=typer.colors.YELLOW)
+    typer.echo(f"snapshot: {written}")
+
+
+def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Path):
+    from smm.data import cache as bar_cache
+    from smm.data.generator import synthetic_universe, universe_rows
+    from smm.features.pipeline import run_features
+    from smm.features.snapshot import write_snapshot
+
+    if source is Source.SYNTHETIC:
+        paths = synthetic_universe()
+        for symbol, path in paths.items():
+            bars = list(path.bars)
+            bar_cache.write_bars(
+                cache_dir, symbol, bars, requested=(bars[0].date, bars[-1].date)
+            )
+        rows = universe_rows(session)
+        sectors = {r["symbol"]: r["sector"] for r in rows}
+        symbols = sorted(sectors)
+        provider = _CacheOnlyProvider(cache_dir, loaded.config.market_regime.benchmark)
+    else:
+        from smm.data.universe import load_universe
+        from smm.data.yfinance_provider import YFinanceProvider
+
+        universe_dir = Path(__file__).resolve().parents[3] / "configs" / "universe"
+        snapshot = load_universe(
+            universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
+        )
+        sectors = _snapshot_sectors(snapshot.path)
+        symbols = list(snapshot.symbols)
+        provider = YFinanceProvider(
+            cache_dir=cache_dir,
+            universe_dir=universe_dir,
+            validation=loaded.config.validation,
+            max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            benchmark=loaded.config.market_regime.benchmark,
+        )
+
+    run = run_features(
+        provider, as_of=session, symbols=symbols, sectors=sectors, loaded=loaded
+    )
+    written = write_snapshot(
+        out_dir,
+        as_of=session,
+        cross_section=run.cross_section,
+        features=run.features,
+        excluded=run.excluded,
+        regime=run.regime,
+        strategy_version=loaded.version,
+        config_hash=loaded.config_hash,
+        return_windows=loaded.config.features.return_windows,
+        benchmarks={loaded.config.market_regime.benchmark.upper()}
+        | {etf.upper() for etf in loaded.config.sector_benchmarks.values()},
+    )
+    return run, written
+
+
+def _snapshot_sectors(path: Path | None) -> dict[str, str]:
+    """Read `symbol -> sector` from a universe snapshot, skipping blanks.
+
+    A blank sector is meaningful — it drops the symbol via rs_sector_missing
+    rather than being guessed at (see configs/universe/README.md).
+    """
+    import csv
+
+    if path is None:
+        return {}
+    with Path(path).open(newline="", encoding="utf-8") as fh:
+        return {
+            row["symbol"].strip().upper(): row["sector"].strip()
+            for row in csv.DictReader(fh)
+            if row.get("sector", "").strip()
+        }
+
+
+class _CacheOnlyProvider:
+    """Reads what ingest already cached. No network, no fallback."""
+
+    def __init__(self, cache_dir: Path, benchmark: str) -> None:
+        self._cache_dir = cache_dir
+        self._benchmark = benchmark.upper()
+
+    def get_daily_bars(self, symbol: str, start: date, end: date):
+        from smm.data import cache as bar_cache
+
+        return bar_cache.read_bars(self._cache_dir, symbol, start, end)
+
+    def get_calendar(self, start: date, end: date) -> list[date]:
+        """Sessions from the cached benchmark, same contract as the real provider.
+
+        Implemented even though the M2 pipeline does not call it yet: a stub
+        missing half the protocol fails the moment anything reaches for it, and
+        the calendar wiring is a live follow-up.
+        """
+        from smm.data import cache as bar_cache
+
+        return [b.date for b in bar_cache.read_bars(self._cache_dir, self._benchmark, start, end)]
+
+
 def main() -> None:
     app()
 

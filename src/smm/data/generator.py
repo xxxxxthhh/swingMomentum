@@ -292,6 +292,109 @@ def risk_off_spy(
     return SyntheticPath(symbol=symbol, bars=tuple(bars), breakout_index=None)
 
 
+def trending(
+    symbol: str,
+    *,
+    start: date = date(2023, 1, 2),
+    total_bars: int = 300,
+    drift: float = 0.002,
+    start_price: float = 100.0,
+    base_volume: float = 5_000_000,
+    seed: str | None = None,
+) -> SyntheticPath:
+    """A plain drifting series — the building block for a synthetic universe."""
+    return SyntheticPath(
+        symbol=symbol,
+        bars=tuple(
+            _grow(
+                symbol,
+                _weekdays(start, total_bars),
+                seed=seed or f"trend:{symbol}",
+                start_price=start_price,
+                drift=drift,
+                noise_amp=0.006,
+                base_volume=base_volume,
+            )
+        ),
+    )
+
+
+#: Sector key -> (benchmark ETF, member symbols). Two GICS sectors is enough to
+#: prove sector RS actually discriminates; more would only add runtime.
+SYNTHETIC_SECTORS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "information_technology": ("XLK", ("SYNT1", "SYNT2", "SYNT3", "SYNT4")),
+    "health_care": ("XLV", ("SYNH1", "SYNH2", "SYNH3", "SYNH4")),
+}
+
+#: Per-symbol drift, chosen so each sector has clear leaders and laggards
+#: relative to its own ETF and to the benchmark. Without that spread the
+#: cross-sectional ranking is uniform and proves nothing.
+_UNIVERSE_DRIFT: dict[str, float] = {
+    "SPY": 0.0010,
+    "XLK": 0.0016,
+    "SYNT1": 0.0034,
+    "SYNT2": 0.0026,
+    "SYNT3": 0.0012,
+    "SYNT4": 0.0002,
+    "XLV": 0.0008,
+    "SYNH1": 0.0028,
+    "SYNH2": 0.0018,
+    "SYNH3": 0.0006,
+    "SYNH4": -0.0004,
+}
+
+
+def synthetic_universe(
+    *,
+    start: date = date(2023, 1, 2),
+    total_bars: int = 300,
+) -> dict[str, SyntheticPath]:
+    """A whole offline cross-section: benchmark, sector ETFs, and members.
+
+    The three original paths cover single-symbol logic but cannot exercise M2:
+    with no sector ETFs, ``RS_Sector`` is missing for every symbol, so
+    ``RelativeStrengthScore`` is missing for every symbol and the candidate set
+    is empty by construction. Ranking two stocks is degenerate besides.
+
+    This keeps the offline path able to produce a real, non-empty result — the
+    same property ``smm ingest --source synthetic`` already has.
+    """
+    paths: dict[str, SyntheticPath] = {}
+    for symbol, drift in _UNIVERSE_DRIFT.items():
+        # ETFs carry far more volume than their members, as in the real market.
+        is_fund = symbol in {"SPY"} | {etf for etf, _ in SYNTHETIC_SECTORS.values()}
+        paths[symbol] = trending(
+            symbol,
+            start=start,
+            total_bars=total_bars,
+            drift=drift,
+            start_price=400.0 if symbol == "SPY" else 100.0,
+            base_volume=40_000_000 if is_fund else 3_000_000,
+        )
+    return paths
+
+
+def universe_rows(as_of: date) -> list[dict[str, str]]:
+    """Universe-snapshot rows for :func:`synthetic_universe`'s members.
+
+    ETFs are deliberately absent: they are benchmarks, and constitution §10
+    limits the universe to common stock.
+    """
+    rows: list[dict[str, str]] = []
+    for sector, (_etf, members) in SYNTHETIC_SECTORS.items():
+        rows.extend(
+            {
+                "symbol": symbol,
+                "name": f"Synthetic {symbol}",
+                "index_membership": "sp500",
+                "sector": sector,
+                "snapshot_date": as_of.isoformat(),
+            }
+            for symbol in members
+        )
+    return rows
+
+
 #: Named paths the test suite builds instead of reading committed CSVs.
 SYNTHETIC_PATHS = {
     "breakout_success": breakout_success,

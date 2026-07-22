@@ -12,6 +12,7 @@ from smm.paper.prints import SplitAction, SplitActionHistory, rebuild_print_bars
 def _bar(
     session: date,
     *,
+    symbol: str = "NVDA",
     open_: float,
     high: float,
     low: float,
@@ -19,7 +20,7 @@ def _bar(
     volume: float,
 ) -> Bar:
     return Bar(
-        symbol="NVDA",
+        symbol=symbol,
         date=session,
         open=open_,
         high=high,
@@ -81,6 +82,45 @@ def test_rebuilds_true_prints_across_known_split_with_action_date_boundary() -> 
     ]
 
 
+def test_rejects_empty_provider_bar_series() -> None:
+    with pytest.raises(DataValidationError, match="empty bars"):
+        rebuild_print_bars((), history=_history(actions=()))
+
+
+@pytest.mark.parametrize(
+    "sessions",
+    [
+        (date(2024, 6, 10), date(2024, 6, 7)),
+        (date(2024, 6, 7), date(2024, 6, 7)),
+    ],
+)
+def test_rejects_unsorted_or_duplicate_provider_sessions(sessions: tuple[date, date]) -> None:
+    bars = (
+        _bar(sessions[0], open_=53.0, high=56.0, low=51.0, close=55.0, volume=1_200),
+        _bar(sessions[1], open_=50.0, high=55.0, low=48.0, close=52.0, volume=1_000),
+    )
+
+    with pytest.raises(DataValidationError, match="sorted with unique sessions"):
+        rebuild_print_bars(bars, history=_history(actions=()))
+
+
+def test_rejects_provider_bar_with_history_symbol_mismatch() -> None:
+    bars = (
+        _bar(
+            date(2024, 6, 7),
+            symbol="AMD",
+            open_=50.0,
+            high=55.0,
+            low=48.0,
+            close=52.0,
+            volume=1_000,
+        ),
+    )
+
+    with pytest.raises(DataValidationError, match="does not match bar symbol"):
+        rebuild_print_bars(bars, history=_history(actions=()))
+
+
 @pytest.mark.parametrize(
     "history",
     [
@@ -138,6 +178,46 @@ def test_rejects_split_action_for_an_unknown_symbol() -> None:
     )
 
     with pytest.raises(DataValidationError, match="does not match history symbol"):
+        rebuild_print_bars(bars, history=history)
+
+
+def test_rejects_action_after_observation_cutoff() -> None:
+    bars = (_bar(date(2024, 6, 7), open_=50.0, high=55.0, low=48.0, close=52.0, volume=1_000),)
+    history = SplitActionHistory(
+        symbol="NVDA",
+        requested_start=date(2024, 6, 7),
+        requested_end=date(2024, 6, 10),
+        coverage_start=date(2024, 1, 1),
+        coverage_end=date(2024, 6, 11),
+        observation_cutoff=date(2024, 6, 10),
+        actions=(
+            SplitAction(
+                action_id="nvda-after-cutoff",
+                symbol="NVDA",
+                action_date=date(2024, 6, 11),
+                split_ratio="2",
+            ),
+        ),
+    )
+
+    with pytest.raises(DataValidationError, match="after observation cutoff"):
+        rebuild_print_bars(bars, history=history)
+
+
+def test_rejects_nonfinite_reconstructed_print_prices() -> None:
+    bars = (_bar(date(2024, 6, 7), open_=50.0, high=55.0, low=48.0, close=52.0, volume=1_000),)
+    history = _history(
+        actions=(
+            SplitAction(
+                action_id="nvda-extreme-split",
+                symbol="NVDA",
+                action_date=date(2024, 6, 10),
+                split_ratio="1e10000",
+            ),
+        )
+    )
+
+    with pytest.raises(DataValidationError, match="non-finite split reconstruction"):
         rebuild_print_bars(bars, history=history)
 
 

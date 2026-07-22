@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed |
+| 状态 | accepted（rev.3；[PR #13](https://github.com/xxxxxthhh/swingMomentum/pull/13) 二次评审接受） |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（不 bump；新增 config 键仅改 `config_hash`，见 [M1 ADR §2.4](./2026-07-22_m1_data_provider_and_universe.md)） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§16 硬过滤、§17 动量、§23 突破信号） |
@@ -143,12 +143,13 @@ age(as_of) = 从 watchlist 进入日（含）到 as_of（含）之间的 session
 同一 `as_of` 上的评估顺序：
 
 ```text
-1. 硬过滤是否仍全部通过？  否 → EXPIRED（reason: hard_filter_lost）
-2. 触发条件是否满足？      是 → TRIGGERED（reason: breakout_confirmed）
-3. age >= N？              是 → EXPIRED（reason: watchlist_expired）
+1. 硬过滤是否仍全部通过？       否 → EXPIRED（reason: hard_filter_lost）
+2. age < N 且触发条件满足？      是 → TRIGGERED（reason: breakout_confirmed）
+3. age >= N？                   是 → EXPIRED（reason: watchlist_expired）
+4. 否则                            保持 WATCHLISTED
 ```
 
-**硬过滤先于触发**：宪法 §16 是可执行的前置条件，已失效的标的即使当日突破也不得成为可执行信号。评审只指定了「触发 → 过期」，此处补齐第一步。
+**硬过滤先于触发，触发受 `age < N` 门控**：宪法 §16 是可执行的前置条件，已失效的标的即使当日突破也不得成为可执行信号；`age = N` 已在观察窗外，不得先无条件计算触发再判断过期。
 
 ### R2. `DETECTED` 语义与同日触发路径
 
@@ -176,7 +177,7 @@ age(as_of) = 从 watchlist 进入日（含）到 as_of（含）之间的 session
 
 R2 的路径设计保证每天至多一次转移，与该唯一键相容（同日触发是单行 `DETECTED → TRIGGERED`）。
 
-**代价（有意接受）：** 上游 bar 修正后重跑会合法地产生差异，从而停在人工裁决上。这与 [#8](https://github.com/xxxxxthhh/swingMomentum/issues/8) 空日历、[#12](https://github.com/xxxxxthhh/swingMomentum/pull/12) 缺 session 的 fail-closed 纪律一致：宁可停，不可静默改写审计链。覆写通道的具体形态属实现 PR。
+**代价（有意接受）：** 上游 bar 修正后重跑会合法地产生差异，从而停在人工裁决上。这与 [PR #8](https://github.com/xxxxxthhh/swingMomentum/pull/8) 空日历、[PR #12](https://github.com/xxxxxthhh/swingMomentum/pull/12) 缺 session 的 fail-closed 纪律一致：宁可停，不可静默改写审计链。覆写通道的具体形态属实现 PR。
 
 ### R4. 触发公式：用 `high`，不用 `close`
 
@@ -278,3 +279,4 @@ Plan 原文写作 `Close > max(High[-20:-1])`，该切片实为 19 个元素；*
 |------|------|------|
 | 2026-07-22 | proposed | M3 实现前提交评审 |
 | 2026-07-22 | proposed (rev.2) | 回应 PR #13 评审：新增 R1 过期边界与评估顺序、R2 `DETECTED` 与同日触发、R3 幂等语义、R4 触发用 `high`、R5 `TotalScore` 表态；补充实现约束 8–10 |
+| 2026-07-22 | accepted (rev.3) | 二次评审接受；将 R1 写成可直接实现的 `age < N` 门控顺序，并修正 PR #8 链接 |

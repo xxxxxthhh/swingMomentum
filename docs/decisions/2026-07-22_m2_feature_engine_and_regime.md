@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed |
+| 状态 | **accepted**（rev.2；经 [PR #6](https://github.com/xxxxxthhh/swingMomentum/pull/6) 评审批准并合并） |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（不 bump；新增 config 键仅改变 `config_hash`，见 [M1 ADR §2.4](./2026-07-22_m1_data_provider_and_universe.md#24-版本纪律划界经-pr-1-确认)） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§14 市场状态、§17 动量、§18 相对强度、§19 趋势质量） |
@@ -264,3 +264,5 @@ features:
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-22 | proposed | M2 实现前提交评审 |
+| 2026-07-22 | proposed (rev.2) | 回应 PR #6 评审：新增 R1 排名宇宙、R2 SPY 缺失语义、R3 数值定义冻结、R4 美元成交额口径、R5 范围澄清；sector 键统一为 GICS 全名 |
+| 2026-07-22 | **accepted** (rev.2) | PR #6 二次评审批准并合并；实现见 [PR #11](https://github.com/xxxxxthhh/swingMomentum/pull/11) |

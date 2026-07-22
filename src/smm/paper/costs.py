@@ -62,16 +62,39 @@ def quote_next_open(
     Missing or malformed M6 parameters fail closed rather than silently
     assuming zero costs.
     """
+    return _quote_for_base_price(
+        bar,
+        base_price=bar.open,
+        base_price_label="TradeableBar.open",
+        side=side,
+        execution=execution,
+        strategy_version=strategy_version,
+        config_hash=config_hash,
+    )
+
+
+def _quote_for_base_price(
+    bar: TradeableBar,
+    *,
+    base_price: object,
+    base_price_label: str,
+    side: OrderSide,
+    execution: ExecutionSection,
+    strategy_version: str,
+    config_hash: str,
+) -> ExecutionQuote:
     if not isinstance(bar, TradeableBar):
         raise DataValidationError("next-open execution quote requires TradeableBar")
     if not isinstance(side, OrderSide):
         raise DataValidationError("next-open execution quote requires an OrderSide")
+    if not isinstance(execution, ExecutionSection):
+        raise DataValidationError("next-open execution quote requires ExecutionSection")
     if not strategy_version.strip() or not config_hash.strip():
         raise DataValidationError("execution quote identity fields must be non-empty")
     if not bar.symbol.strip():
         raise DataValidationError("TradeableBar symbol must be non-empty")
 
-    base_price = _positive_finite_decimal(bar.open, label="TradeableBar.open")
+    resolved_base_price = _positive_finite_decimal(base_price, label=base_price_label)
     half_spread = _required_cost(execution.half_spread_bps, label="half_spread_bps")
     commission = _required_cost(
         execution.commission_per_share,
@@ -88,11 +111,15 @@ def quote_next_open(
     )
     if side is OrderSide.BUY:
         slippage = entry_slippage
-        fill_price = base_price * (_ONE + (half_spread + slippage) / _BPS_DENOMINATOR)
+        fill_price = resolved_base_price * (
+            _ONE + (half_spread + slippage) / _BPS_DENOMINATOR
+        )
         cash_per_share = fill_price + commission
     else:
         slippage = exit_slippage
-        fill_price = base_price * (_ONE - (half_spread + slippage) / _BPS_DENOMINATOR)
+        fill_price = resolved_base_price * (
+            _ONE - (half_spread + slippage) / _BPS_DENOMINATOR
+        )
         cash_per_share = fill_price - commission
 
     if fill_price <= _ZERO:
@@ -106,7 +133,7 @@ def quote_next_open(
         strategy_version=strategy_version,
         config_hash=config_hash,
         side=side,
-        base_price=base_price,
+        base_price=resolved_base_price,
         half_spread_bps=half_spread,
         slippage_bps=slippage,
         fill_price=fill_price,

@@ -20,6 +20,10 @@ from smm.config.loader import load_config
 from smm.core.errors import DataValidationError
 from smm.data import cache as bar_cache
 from smm.data.generator import synthetic_universe, universe_rows
+from smm.domain.enums import SignalState
+from smm.report.rows import BUCKET_WATCHLIST
+from smm.signals.lifecycle import active_transitions_by_symbol
+from smm.signals.store import read_transitions
 
 
 def _synthetic_setup(cache_dir: Path):
@@ -186,6 +190,69 @@ def test_zero_symbols_still_produces_a_complete_manifest_and_header_only_csv(
     csv_lines = (day_dir / "report.csv").read_text(encoding="utf-8").strip("\n").split("\n")
     assert len(csv_lines) == 1  # header only
     assert (day_dir / "manifest.json").exists()
+
+
+def test_forward_session_advance_carries_a_silent_watchlist_signal(tmp_path: Path) -> None:
+    """The motion the N-day replay gate stands on: seal day D, then run
+    D+1 successfully, with a D-born WATCHLISTED signal that doesn't
+    transition on D+1 replayed forward as a silent continuation -- not
+    lost, per M4 ADR §4/§5.
+    """
+    loaded, provider, symbols, sectors, _last_session = _synthetic_setup(tmp_path / "cache")
+    root = artifact_root(
+        tmp_path / "runs", strategy_version=loaded.version, config_hash=loaded.config_hash
+    )
+    # Known from this deterministic fixture: day one births several
+    # WATCHLISTED signals; day two has zero transitions for all of them.
+    day_one = date(2024, 2, 5)
+    day_two = date(2024, 2, 6)
+
+    first = run_daily(
+        provider,
+        session=day_one,
+        symbols=symbols,
+        sectors=sectors,
+        loaded=loaded,
+        root=root,
+        provider_source="synthetic",
+    )
+    second = run_daily(
+        provider,
+        session=day_two,
+        symbols=symbols,
+        sectors=sectors,
+        loaded=loaded,
+        root=root,
+        provider_source="synthetic",
+    )
+
+    assert not first.skipped_as_noop
+    assert not second.skipped_as_noop
+
+    all_transitions = read_transitions(root)
+    active_after_day_one = active_transitions_by_symbol(
+        [row for row in all_transitions if row.as_of <= day_one]
+    )
+    watchlisted_symbols = {
+        symbol
+        for symbol, row in active_after_day_one.items()
+        if row.to_state is SignalState.WATCHLISTED
+    }
+    assert watchlisted_symbols, "fixture assumption broke: day one birthed no WATCHLISTED signal"
+    day_two_transition_symbols = {row.symbol for row in all_transitions if row.as_of == day_two}
+    silently_carried = watchlisted_symbols - day_two_transition_symbols
+    assert silently_carried, "fixture assumption broke: day two transitioned every symbol"
+
+    import csv
+
+    with (root / day_two.isoformat() / "report.csv").open(newline="", encoding="utf-8") as fh:
+        by_symbol = {row["symbol"]: row for row in csv.DictReader(fh)}
+    for symbol in silently_carried:
+        row = by_symbol[symbol]
+        assert row["bucket"] == BUCKET_WATCHLIST
+        assert row["from_state"] == ""
+        assert row["to_state"] == ""
+        assert row["close"] != ""  # today's reading, not blank
 
 
 def test_sanitize_path_segment_rejects_path_traversal() -> None:

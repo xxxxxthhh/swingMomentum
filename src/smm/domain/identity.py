@@ -10,17 +10,15 @@ def make_setup_key(
     symbol: str,
     *,
     breakout_window: int,
-    breakout_level: float,
-    anchor_date: date,
+    watchlist_entry: date,
 ) -> str:
     """Build a stable setup key for a breakout-style structure.
 
-    Same symbol, window, level (rounded), and anchor date ⇒ same key.
-    ``breakout_level`` is rounded to 4 decimal places to avoid float noise.
+    Identity is anchored to the observation window, not to the rolling
+    breakout level. The latter is a daily property and would manufacture a new
+    logical signal whenever the trailing high changes.
     """
-    level = f"{breakout_level:.4f}"
-    raw = f"{symbol.upper()}|bw{breakout_window}|lvl{level}|a{anchor_date.isoformat()}"
-    return raw
+    return f"{symbol.upper()}|bw{breakout_window}|w{watchlist_entry.isoformat()}"
 
 
 def make_logical_signal_id(

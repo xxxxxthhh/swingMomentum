@@ -14,6 +14,7 @@
 - [2026-07-22_m1_data_provider_and_universe.md](./2026-07-22_m1_data_provider_and_universe.md)（accepted）— M1 数据源、股票池快照、provider-native / true-print 价格边界、fixture 生成器
 - [2026-07-22_m2_feature_engine_and_regime.md](./2026-07-22_m2_feature_engine_and_regime.md)（accepted）— M2 特征引擎、板块 ETF 基准、缺失语义、市场状态
 - [2026-07-22_m3_watchlist_and_signal_lifecycle.md](./2026-07-22_m3_watchlist_and_signal_lifecycle.md)（accepted）— M3 Watchlist、信号身份与生命周期持久化
-- [2026-07-22_m4_signal_report_and_daily_task.md](./2026-07-22_m4_signal_report_and_daily_task.md)（proposed）— M4 信号日报、连续 session 日任务与可复现 artifact bundle
+- [2026-07-22_m4_signal_report_and_daily_task.md](./2026-07-22_m4_signal_report_and_daily_task.md)（accepted；rev.2）— M4 信号日报、连续 session 日任务与可复现 artifact bundle
+- [2026-07-22_m5_risk_engine_and_planned_sizing.md](./2026-07-22_m5_risk_engine_and_planned_sizing.md)（accepted；rev.2）— M5 风险引擎、计划仓位、批内预算与生命周期边界
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

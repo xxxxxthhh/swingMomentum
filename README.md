@@ -18,7 +18,7 @@ Personal **Swing Momentum** trading system: constitution-driven rules, daily sca
 
 ---
 
-**Implementation status:** Phase 0 and M1–M4 (MVP-A) are complete. The M5 risk-engine and planned-sizing contract is under ADR review before implementation. **No live auto-trading.**
+**Implementation status:** Phase 0 and M1–M4 (MVP-A) are complete. The M5 risk-engine and planned-sizing contract is accepted; implementation is next. **No live auto-trading.**
 
 ## Docs map
 

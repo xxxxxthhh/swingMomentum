@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed |
+| 状态 | accepted（rev.2；[PR #21](https://github.com/xxxxxthhh/swingMomentum/pull/21) 首轮评审接受） |
 | 日期 | 2026-07-22 |
 | 策略版本 | SMM-V1.0.0（参数不变；实施期新增 operational kill-switch 键只移动 `config_hash`） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§26–§28、§33–§35、§53–§54） |
@@ -46,7 +46,7 @@ M5：
 - 对同批接受项在内存中预留 capital / heat / sector / cluster budget；
 - 返回确定性、可审计的 reason codes；
 - 不写 order / fill / position / trade；
-- 不读取 yfinance，不接受 provider-native `Bar` 或 `AdjustedBar` 作为成交价格；
+- 不读取 yfinance；M5 代码路径**完全不读取** `Bar`、`PrintBar`、`AdjustedBar` 或 `TradeableBar`，测试直接构造已校验的 `EligibleCandidate`，M7 才由上游 adapter 提供候选；
 - 不把 M4 manifest 的 `execution_mode` 从 `mvp_a_signal` 改成 shadow/paper；
 - 不在 M5 把风险 decision 接入现有 transition store。生命周期持久化由 §8 冻结语义、M7 集成。
 
@@ -149,6 +149,17 @@ Regime：
 | Risk-Off | `risk_off_per_trade == 0` | `risk_off_max_exposure` 仅描述已有敞口上限 | **一律拒绝新仓**，`risk_off_new_entries_blocked` |
 
 若冻结 config 将 `risk_off_per_trade` 改为非零，schema/风险契约应拒绝该配置；不能通过参数漂移绕过宪法的新仓禁令。
+
+业务拒绝按固定顺序短路，避免同一候选因调用路径不同得到不同 primary reason：
+
+```text
+1. kill switch
+2. Risk-Off regime
+3. symbol_already_open
+4. sizing capacities
+```
+
+输入/identity/单位错误在上述业务门之前整批 fail closed。命中 kill switch、Risk-Off 或已有 symbol 后不再运行 sizing；进入 sizing 后，所有为 0 的 capacity reasons 仍按 §6 的固定顺序输出。
 
 ### 6. 整股 quantity 是所有预算 capacity 的最小值
 
@@ -322,3 +333,4 @@ risk_sized_by_cluster
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-22 | proposed | M5 实现前提交评审；冻结风险输入、预算单位、批内预留、生命周期单跳与 M5/M6/M7 边界 |
+| 2026-07-22 | accepted (rev.2) | Task Reviewer comment `5047596385` 接受契约；按 non-blocking residual 补充业务拒绝短路顺序与 M5 不读取任何 bar 类型的显式边界 |

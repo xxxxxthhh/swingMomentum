@@ -82,7 +82,7 @@ class YFinanceProvider:
     def get_daily_bars(self, symbol: str, start: date, end: date) -> Sequence[Bar]:
         if cache.covers(self._cache_dir, symbol, start, end):
             return cache.read_bars(self._cache_dir, symbol, start, end)
-        fetched = self.fetch(symbol, start, end)
+        fetched = self.fetch(symbol, start, end, calendar=self._calendar_for(start, end))
         cache.write_bars(self._cache_dir, symbol, fetched, requested=(start, end))
         return cache.read_bars(self._cache_dir, symbol, start, end)
 
@@ -103,7 +103,26 @@ class YFinanceProvider:
 
     # -- internals -------------------------------------------------------
 
-    def fetch(self, symbol: str, start: date, end: date) -> list[Bar]:
+    def _calendar_for(self, start: date, end: date) -> list[date] | None:
+        """Sessions to validate against, or ``None`` when the benchmark is the subject.
+
+        The benchmark defines the calendar, so it cannot be checked against
+        itself — the first fetch of a run has nothing to compare to. Every other
+        symbol is checked, which is what makes the ordering (benchmark first) a
+        real dependency rather than a lucky accident.
+        """
+        if not cache.cached_range(self._cache_dir, self._benchmark):
+            return None
+        return self.get_calendar(start, end) or None
+
+    def fetch(
+        self,
+        symbol: str,
+        start: date,
+        end: date,
+        *,
+        calendar: list[date] | None = None,
+    ) -> list[Bar]:
         """Download, normalise and validate. Raises rather than returning partial data."""
         try:
             import yfinance  # noqa: PLC0415
@@ -131,7 +150,7 @@ class YFinanceProvider:
             frame.columns = frame.columns.droplevel(-1)
 
         bars = [self._row_to_bar(symbol, index, row) for index, row in frame.iterrows()]
-        validate_bars(bars, cfg=self._validation)
+        validate_bars(bars, cfg=self._validation, calendar=calendar)
         return bars
 
     @staticmethod

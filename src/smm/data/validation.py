@@ -8,7 +8,8 @@ complexity, and a quietly patched bar produces a signal nobody can audit.
 Coverage of the §12.4 list:
 
 ===========================  ==========================================
-缺失日期                      :func:`check_session_continuity`
+缺失日期                      :func:`check_session_continuity` (calendar-free),
+                             :func:`check_session_completeness` (with calendar)
 重复记录                      :func:`check_ordering_and_duplicates`
 价格为零或负数                 enforced at ``Bar`` construction (``gt=0``)
 单日异常跳变                   :func:`check_price_jumps`
@@ -87,6 +88,45 @@ def check_session_dates(bars: Sequence[Bar], *, calendar: Iterable[date] | None 
     for bar in bars:
         if bar.date not in sessions:
             _fail(f"{bar.symbol}: {bar.date} is outside the trading calendar")
+
+
+def check_session_completeness(
+    bars: Sequence[Bar], *, calendar: Iterable[date] | None = None
+) -> None:
+    """Every calendar session inside the symbol's own life must have a bar.
+
+    Distinct from :func:`check_session_dates`, which asks whether each *bar*
+    falls on a session. This asks the opposite and more dangerous question:
+    whether a *session* is missing its bar. A hole does not raise anything on
+    its own — it silently shortens a rolling window, so SMA200 and the 52-week
+    high quietly compute over the wrong span. That is the failure mode issue #5
+    was opened for, and cache coverage does not detect it: coverage records what
+    was *requested*, not what arrived.
+
+    The window is clamped to ``[first bar, last bar]``. Sessions before a
+    symbol's first bar or after its last are not holes — the company had not
+    listed yet, or no longer trades — and treating them as errors would reject
+    every recent IPO in the universe.
+    """
+    if calendar is None or not bars:
+        return
+    sessions = sorted(calendar)
+    if not sessions:
+        _fail(
+            "empty trading calendar: cannot verify session completeness — the "
+            "benchmark has no cached sessions in this window"
+        )
+    first, last = bars[0].date, bars[-1].date
+    present = {b.date for b in bars}
+    missing = [s for s in sessions if first <= s <= last and s not in present]
+    if missing:
+        shown = ", ".join(d.isoformat() for d in missing[:5])
+        more = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+        _fail(
+            f"{bars[0].symbol}: {len(missing)} trading session(s) missing between "
+            f"{first} and {last}: {shown}{more} — a hole silently shortens every "
+            f"rolling window that spans it"
+        )
 
 
 def check_ordering_and_duplicates(bars: Sequence[Bar]) -> None:
@@ -239,6 +279,7 @@ def validate_bars(
     """Run every §12.4 check. Raises on the first failure; never repairs."""
     check_ordering_and_duplicates(bars)
     check_session_dates(bars, calendar=calendar)
+    check_session_completeness(bars, calendar=calendar)
     check_session_continuity(bars, cfg=cfg)
     check_price_jumps(bars, cfg=cfg)
     check_volume_anomalies(bars, cfg=cfg)

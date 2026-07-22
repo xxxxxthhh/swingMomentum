@@ -84,8 +84,7 @@ def test_smoke_generated_bar_to_signal_object(ohlcv_dir: Path) -> None:
     setup_key = make_setup_key(
         last.symbol,
         breakout_window=loaded.config.signal.breakout_window,
-        breakout_level=last.high,
-        anchor_date=last.date,
+        watchlist_entry=last.date,
     )
     signal_id = make_logical_signal_id(
         symbol=last.symbol,

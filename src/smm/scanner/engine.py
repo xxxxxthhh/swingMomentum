@@ -62,6 +62,14 @@ class TriggerResult:
 class ScanResult:
     as_of: date
     transitions: tuple[SignalTransition, ...]
+    # Non-persisted, same-day trigger diagnostics per symbol (M4 ADR §5): the
+    # single public source reporting reads for a signal's current
+    # breakout_level/relative_volume/extension_atr, whether or not it
+    # transitioned today. Covers active WATCHLISTED (silent stay included)
+    # and active TRIGGERED (open_trigger) symbols with a feature available
+    # for `as_of`. Absence means no same-day observation exists -- the
+    # report must show that explicitly, not fill it in.
+    observations: Mapping[str, TriggerResult]
 
 
 def evaluate_hard_filters(feature: SymbolFeatures, config: StrategyConfig) -> HardFilterResult:
@@ -265,6 +273,7 @@ def scan_session(
     history = [row for row in prior_transitions if row.as_of < as_of]
     active = active_transitions_by_symbol(history)
     emitted: list[SignalTransition] = []
+    observations: dict[str, TriggerResult] = {}
 
     # Existing observations must be resolved before any new setup may be born.
     for symbol, latest in sorted(active.items()):
@@ -273,6 +282,19 @@ def scan_session(
                 f"{symbol}: active signal identity does not match the current config"
             )
         if latest.to_state is not SignalState.WATCHLISTED:
+            # A carried TRIGGERED (open_trigger) signal isn't re-evaluated by
+            # the scanner, but the report still needs its same-day reading --
+            # not the stale attributes off the original trigger transition.
+            if latest.to_state is SignalState.TRIGGERED:
+                feature = features.get(symbol)
+                if feature is not None:
+                    observations[symbol] = evaluate_trigger(
+                        bars_by_symbol.get(symbol, ()),
+                        features=feature,
+                        as_of=as_of,
+                        sessions=sessions,
+                        cfg=loaded.config.signal,
+                    )
             continue
 
         if symbol not in members:
@@ -356,6 +378,9 @@ def scan_session(
             sessions=sessions,
             cfg=loaded.config.signal,
         )
+        # Captured whether or not it triggers -- the silent-stay case (M3's
+        # own product) needs today's reading just as much as a trigger day.
+        observations[symbol] = trigger
         if trigger.triggered:
             emitted.append(
                 _transition(
@@ -391,6 +416,7 @@ def scan_session(
             sessions=sessions,
             cfg=loaded.config.signal,
         )
+        observations[symbol] = trigger
         setup_key = make_setup_key(
             symbol,
             breakout_window=loaded.config.signal.breakout_window,
@@ -422,4 +448,4 @@ def scan_session(
             )
         )
 
-    return ScanResult(as_of=as_of, transitions=tuple(emitted))
+    return ScanResult(as_of=as_of, transitions=tuple(emitted), observations=observations)

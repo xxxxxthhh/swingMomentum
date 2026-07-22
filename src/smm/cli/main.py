@@ -277,6 +277,103 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
     return run, written
 
 
+@app.command("run-daily")
+def run_daily_cmd(
+    as_of: Annotated[str, typer.Option("--as-of", help="Session date (YYYY-MM-DD)")],
+    source: Annotated[
+        Source,
+        typer.Option("--source", help="synthetic runs fully offline; market hits yfinance"),
+    ] = Source.SYNTHETIC,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("data/cache"),
+    runs_dir: Annotated[
+        Path, typer.Option("--runs-dir", help="Artifact root base (nests by version/config_hash)")
+    ] = Path("data/runs"),
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+) -> None:
+    """Run one M4 daily task: scan, seal transitions, write the report bundle.
+
+    The single public seam for a real daily run and the N-day replay gate --
+    `smm ingest`/`smm features` stay diagnostic only (M4 ADR §1).
+    """
+    try:
+        loaded = load_config(config_path)
+    except ConfigError as exc:
+        typer.secho(f"config error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        session = date.fromisoformat(as_of)
+    except ValueError as exc:
+        typer.secho(f"--as-of must be YYYY-MM-DD, got {as_of!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        result = _execute_run_daily(loaded, session, source, cache_dir, runs_dir)
+    except FailClosedError as exc:
+        typer.secho(f"fail-closed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"as_of: {result.as_of}  regime: {result.regime.value}  source: {source.value}")
+    typer.echo(f"version: {loaded.version}  config_hash: {loaded.config_hash}")
+    for bucket, count in result.bucket_counts.items():
+        typer.echo(f"  {bucket}: {count}")
+    typer.echo(f"manifest: {result.manifest_path}")
+    if result.skipped_as_noop:
+        typer.secho("exact rerun -- no-op", fg=typer.colors.YELLOW)
+
+
+def _execute_run_daily(loaded, session: date, source: Source, cache_dir: Path, runs_dir: Path):
+    from smm.cli.daily import artifact_root, run_daily
+    from smm.data.generator import synthetic_universe, universe_rows
+
+    root = artifact_root(
+        runs_dir, strategy_version=loaded.version, config_hash=loaded.config_hash
+    )
+
+    if source is Source.SYNTHETIC:
+        from smm.data import cache as bar_cache
+
+        paths = synthetic_universe()
+        for symbol, path in paths.items():
+            bars = list(path.bars)
+            bar_cache.write_bars(
+                cache_dir, symbol, bars, requested=(bars[0].date, bars[-1].date)
+            )
+        rows = universe_rows(session)
+        sectors = {r["symbol"]: r["sector"] for r in rows}
+        symbols = sorted(sectors)
+        provider = _CacheOnlyProvider(cache_dir, loaded.config.market_regime.benchmark)
+        universe_snapshot_id = ""
+    else:
+        from smm.data.universe import load_universe
+        from smm.data.yfinance_provider import YFinanceProvider
+
+        universe_dir = Path(__file__).resolve().parents[3] / "configs" / "universe"
+        snapshot = load_universe(
+            universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
+        )
+        sectors = _snapshot_sectors(snapshot.path)
+        symbols = list(snapshot.symbols)
+        provider = YFinanceProvider(
+            cache_dir=cache_dir,
+            universe_dir=universe_dir,
+            validation=loaded.config.validation,
+            max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            benchmark=loaded.config.market_regime.benchmark,
+        )
+        universe_snapshot_id = snapshot.path.stem
+
+    return run_daily(
+        provider,
+        session=session,
+        symbols=symbols,
+        sectors=sectors,
+        loaded=loaded,
+        root=root,
+        provider_source=source.value,
+        universe_snapshot_id=universe_snapshot_id,
+    )
+
+
 def _snapshot_sectors(path: Path | None) -> dict[str, str]:
     """Read `symbol -> sector` from a universe snapshot, skipping blanks.
 

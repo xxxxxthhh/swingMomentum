@@ -42,7 +42,10 @@ _TRANSITION_FIELDS = tuple(SignalTransition.model_fields)
 
 
 @dataclass(frozen=True, slots=True)
-class _BatchSeal:
+class BatchSeal:
+    """Read-only batch-seal metadata: the fact-of-record for which ``as_of``
+    dates have been processed, including sealed-empty days (M4 ADR §2)."""
+
     as_of: date
     strategy_version: str
     config_hash: str
@@ -65,7 +68,7 @@ def _transition_row(transition: SignalTransition) -> dict[str, object]:
     return values
 
 
-def _seal_row(seal: _BatchSeal) -> dict[str, object]:
+def _seal_row(seal: BatchSeal) -> dict[str, object]:
     values = {name: None for name in _SCHEMA.names}
     values.update(
         record_type=_BATCH,
@@ -87,13 +90,13 @@ def _batch_digest(transitions: Sequence[SignalTransition]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _read_store(root: Path | str) -> tuple[list[SignalTransition], dict[date, _BatchSeal]]:
+def _read_store(root: Path | str) -> tuple[list[SignalTransition], dict[date, BatchSeal]]:
     target = transition_path(root)
     if not target.exists():
         return [], {}
 
     transitions: list[SignalTransition] = []
-    seals: dict[date, _BatchSeal] = {}
+    seals: dict[date, BatchSeal] = {}
     for raw in pq.read_table(target).to_pylist():
         record_type = raw.get("record_type") or _TRANSITION
         if record_type == _TRANSITION:
@@ -104,7 +107,7 @@ def _read_store(root: Path | str) -> tuple[list[SignalTransition], dict[date, _B
         if record_type != _BATCH:
             raise DataValidationError(f"unknown signal-store record type {record_type!r}")
         try:
-            seal = _BatchSeal(
+            seal = BatchSeal(
                 as_of=raw["as_of"],
                 strategy_version=raw["strategy_version"],
                 config_hash=raw["config_hash"],
@@ -150,6 +153,76 @@ def read_transitions(root: Path | str) -> list[SignalTransition]:
     return transitions
 
 
+def read_batch_seals(root: Path | str) -> dict[date, BatchSeal]:
+    """Read-only batch-seal metadata, keyed by ``as_of``.
+
+    Callers must use this -- not "does this as_of have any transition rows"
+    -- to ask whether a day was processed. A sealed day with zero
+    transitions is a first-class processed state (M4 ADR §2); inferring
+    "unprocessed" from an empty row set would let a caller re-run and
+    silently re-decide an already-sealed empty day.
+    """
+    _, seals = _read_store(root)
+    return seals
+
+
+def latest_sealed_as_of(root: Path | str) -> date | None:
+    """The most recent sealed ``as_of``, or ``None`` if the store is empty."""
+    seals = read_batch_seals(root)
+    return max(seals) if seals else None
+
+
+def assert_session_continuity(
+    root: Path | str,
+    *,
+    as_of: date,
+    sessions: Sequence[date],
+) -> None:
+    """M4 ADR §2: fail closed on anything but an exact rerun or the next
+    provider-calendar session after the latest seal.
+
+    ``sessions`` is the provider calendar, not a local window -- it must
+    include the latest sealed ``as_of`` or this cannot tell "the next
+    session" from "a gap". A skipped session could hide a
+    ``WATCHLISTED -> TRIGGERED`` transition or a hard-filter loss that
+    becomes unrecoverable once the day is gone, so jumps and backfills both
+    fail closed rather than silently advancing.
+    """
+    ordered = list(sessions)
+    if ordered != sorted(set(ordered)):
+        raise DataValidationError("session calendar must be sorted with unique sessions")
+    if as_of not in ordered:
+        raise DataValidationError(f"as_of {as_of} is not a provider session")
+
+    latest = latest_sealed_as_of(root)
+    if latest is None:
+        return  # no prior seal: any valid session starts the observation window
+
+    if as_of == latest:
+        return  # exact rerun
+
+    if latest not in ordered:
+        raise DataValidationError(
+            f"provider calendar does not cover the latest sealed batch {latest}"
+        )
+    # Checked before "what's next": if as_of is already behind latest, no
+    # amount of calendar reach-forward changes the answer, and a calendar
+    # that happens to end exactly at latest must not be misread as "no
+    # session follows" when the real problem is a backfill attempt.
+    if as_of < latest:
+        raise DataValidationError(
+            f"as_of {as_of} precedes the latest sealed batch {latest}; backfill is forbidden"
+        )
+    latest_index = ordered.index(latest)
+    expected_next = ordered[latest_index + 1] if latest_index + 1 < len(ordered) else None
+    if as_of == expected_next:
+        return
+    raise DataValidationError(
+        f"as_of {as_of} skips one or more sessions after the latest seal {latest}; "
+        f"expected {expected_next if expected_next is not None else 'a later provider session'}"
+    )
+
+
 def _resolve_batch_metadata(
     transitions: Sequence[SignalTransition],
     *,
@@ -189,7 +262,7 @@ def _resolve_batch_metadata(
 def _write_store(
     target: Path,
     transitions: Sequence[SignalTransition],
-    seals: Sequence[_BatchSeal],
+    seals: Sequence[BatchSeal],
 ) -> None:
     records = [
         *(_seal_row(seal) for seal in sorted(seals, key=lambda seal: seal.as_of)),
@@ -261,7 +334,7 @@ def append_transitions(
     merged.extend(batch)
     merged.sort(key=lambda row: (row.as_of, row.signal_id))
     latest_transitions(merged)
-    new_seal = _BatchSeal(
+    new_seal = BatchSeal(
         as_of=batch_as_of,
         strategy_version=batch_version,
         config_hash=batch_hash,

@@ -174,3 +174,86 @@ def test_fetch_produces_validated_bars(tmp_path: Path) -> None:
     assert bars
     assert all(b.symbol == "AAPL" for b in bars)
     assert all(0 < b.adj_factor <= 1.0 for b in bars)
+
+
+# --- calendar is a provider contract, not a calling convention -------------
+
+
+def _stub_fetch(bars):
+    """A fetch that returns fixed bars but still runs the real validation."""
+
+    def fetch(self, symbol, start, end, *, calendar=None):
+        from smm.data.validation import validate_bars
+
+        validate_bars(bars, cfg=self._validation, calendar=calendar)
+        return bars
+
+    return fetch
+
+
+def test_member_without_a_cached_benchmark_fails_closed(tmp_path: Path) -> None:
+    """The bypass this guards: returning None here would let a member validate
+    with no calendar, get cached WITH its coverage recorded, and then be served
+    from that cache forever without ever being checked."""
+    provider = build(tmp_path)
+    bars = [b.model_copy(update={"symbol": "AAPL"}) for b in breakout_success().bars]
+    provider.fetch = _stub_fetch(bars).__get__(provider)  # type: ignore[method-assign]
+
+    with pytest.raises(DataValidationError, match="empty trading calendar"):
+        provider.get_daily_bars("AAPL", bars[0].date, bars[-1].date)
+
+    # And crucially: nothing was written, so no coverage was recorded either.
+    assert cache.read_bars(tmp_path / "cache", "AAPL") == []
+    assert cache.covered_windows(tmp_path / "cache", "AAPL") == []
+
+
+def test_member_outside_the_benchmarks_cached_window_fails_closed(tmp_path: Path) -> None:
+    """Benchmark file present but no sessions in this window.
+
+    `get_calendar(...) or None` would have turned this empty list back into a
+    skip, which is the same bypass by another route.
+    """
+    provider = build(tmp_path)
+    spy = [b.model_copy(update={"symbol": "SPY"}) for b in breakout_success().bars]
+    cache.write_bars(
+        tmp_path / "cache", "SPY", spy[:50], requested=(spy[0].date, spy[49].date)
+    )
+    member = [b.model_copy(update={"symbol": "AAPL"}) for b in breakout_success().bars]
+    provider.fetch = _stub_fetch(member[200:]).__get__(provider)  # type: ignore[method-assign]
+
+    with pytest.raises(DataValidationError, match="empty trading calendar"):
+        provider.get_daily_bars("AAPL", member[200].date, member[-1].date)
+    assert cache.read_bars(tmp_path / "cache", "AAPL") == []
+
+
+def test_the_benchmark_itself_bootstraps_without_a_calendar(tmp_path: Path) -> None:
+    """The single legitimate skip: it defines the calendar."""
+    provider = build(tmp_path)
+    spy = [b.model_copy(update={"symbol": "SPY"}) for b in breakout_success().bars]
+    provider.fetch = _stub_fetch(spy).__get__(provider)  # type: ignore[method-assign]
+
+    served = provider.get_daily_bars("SPY", spy[0].date, spy[-1].date)
+    assert len(served) == len(spy)
+
+
+def test_member_validates_once_the_benchmark_is_cached(tmp_path: Path) -> None:
+    provider = build(tmp_path)
+    spy = [b.model_copy(update={"symbol": "SPY"}) for b in breakout_success().bars]
+    cache.write_bars(tmp_path / "cache", "SPY", spy, requested=(spy[0].date, spy[-1].date))
+    member = [b.model_copy(update={"symbol": "AAPL"}) for b in breakout_success().bars]
+    provider.fetch = _stub_fetch(member).__get__(provider)  # type: ignore[method-assign]
+
+    served = provider.get_daily_bars("AAPL", member[0].date, member[-1].date)
+    assert len(served) == len(member)
+
+
+def test_calendar_for_returns_none_only_for_the_benchmark(tmp_path: Path) -> None:
+    provider = build(tmp_path)
+    spy = [b.model_copy(update={"symbol": "SPY"}) for b in breakout_success().bars]
+    window = (spy[0].date, spy[-1].date)
+
+    assert provider._calendar_for("SPY", *window) is None
+    assert provider._calendar_for("AAPL", *window) == []  # fail-closed, not a skip
+
+    cache.write_bars(tmp_path / "cache", "SPY", spy, requested=window)
+    assert provider._calendar_for("AAPL", *window) == [b.date for b in spy]

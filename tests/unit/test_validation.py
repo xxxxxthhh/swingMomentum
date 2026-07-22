@@ -15,6 +15,7 @@ from smm.data.validation import (
     check_adj_factor,
     check_ordering_and_duplicates,
     check_price_jumps,
+    check_session_completeness,
     check_session_continuity,
     check_session_dates,
     check_split_artefacts,
@@ -270,3 +271,78 @@ def test_price_halving_alone_is_not_flagged_as_split() -> None:
         ],
         cfg=CFG,
     )
+
+
+# --- session completeness (issue #10) --------------------------------------
+
+
+def sessions(n: int, *, start: date = date(2024, 1, 2)) -> list[date]:
+    out: list[date] = []
+    day = start
+    while len(out) < n:
+        if day.weekday() < 5:
+            out.append(day)
+        day += timedelta(days=1)
+    return out
+
+
+def test_complete_series_passes() -> None:
+    days = sessions(10)
+    check_session_completeness([bar(d) for d in days], calendar=days)
+
+
+def test_a_hole_is_detected() -> None:
+    """The failure that silently shortens SMA200 rather than raising."""
+    days = sessions(10)
+    holed = [bar(d) for d in days if d != days[4]]
+    with pytest.raises(DataValidationError, match="trading session"):
+        check_session_completeness(holed, calendar=days)
+
+
+def test_hole_message_names_the_missing_session() -> None:
+    days = sessions(10)
+    holed = [bar(d) for d in days if d != days[4]]
+    with pytest.raises(DataValidationError, match=days[4].isoformat()):
+        check_session_completeness(holed, calendar=days)
+
+
+def test_a_late_listing_is_not_a_hole() -> None:
+    """Sessions before a symbol's first bar are not missing data.
+
+    Treating them as errors would reject every recent IPO in the universe —
+    exactly the over-strictness that gets fail-closed routed around.
+    """
+    days = sessions(10)
+    listed_late = [bar(d) for d in days[5:]]
+    check_session_completeness(listed_late, calendar=days)
+
+
+def test_a_delisting_is_not_a_hole() -> None:
+    days = sessions(10)
+    stopped_early = [bar(d) for d in days[:5]]
+    check_session_completeness(stopped_early, calendar=days)
+
+
+def test_completeness_without_a_calendar_is_skipped() -> None:
+    days = sessions(10)
+    check_session_completeness([bar(d) for d in days if d != days[4]], calendar=None)
+
+
+def test_empty_calendar_fails_completeness_too() -> None:
+    with pytest.raises(DataValidationError, match="no cached sessions"):
+        check_session_completeness([bar(date(2024, 1, 2))], calendar=[])
+
+
+def test_many_holes_are_summarised() -> None:
+    days = sessions(20)
+    holed = [bar(d) for d in days if d not in days[2:12]]
+    with pytest.raises(DataValidationError, match=r"\+5 more"):
+        check_session_completeness(holed, calendar=days)
+
+
+def test_validate_bars_runs_completeness() -> None:
+    """Wired into the full check, not only callable on its own."""
+    days = sessions(10)
+    holed = [bar(d) for d in days if d != days[4]]
+    with pytest.raises(DataValidationError, match="trading session"):
+        validate_bars(holed, cfg=CFG, calendar=days)

@@ -82,7 +82,9 @@ class YFinanceProvider:
     def get_daily_bars(self, symbol: str, start: date, end: date) -> Sequence[Bar]:
         if cache.covers(self._cache_dir, symbol, start, end):
             return cache.read_bars(self._cache_dir, symbol, start, end)
-        fetched = self.fetch(symbol, start, end)
+        fetched = self.fetch(
+            symbol, start, end, calendar=self._calendar_for(symbol, start, end)
+        )
         cache.write_bars(self._cache_dir, symbol, fetched, requested=(start, end))
         return cache.read_bars(self._cache_dir, symbol, start, end)
 
@@ -103,7 +105,43 @@ class YFinanceProvider:
 
     # -- internals -------------------------------------------------------
 
-    def fetch(self, symbol: str, start: date, end: date) -> list[Bar]:
+    def _calendar_for(self, symbol: str, start: date, end: date) -> list[date] | None:
+        """Sessions to validate ``symbol`` against.
+
+        Three distinct outcomes, and conflating any two of them re-opens the
+        hole this exists to close:
+
+        - ``None`` — **only** when the subject is the benchmark itself. It
+          defines the calendar and cannot be checked against itself, so the
+          first fetch of a run has nothing to compare to. This is the single
+          legitimate skip.
+        - ``[]`` — the benchmark is not cached, or has no sessions in this
+          window. Everything downstream treats an empty calendar as
+          fail-closed. Returning ``None`` here instead would let any member
+          validate with no calendar at all, get written to cache **with its
+          coverage recorded**, and then be served from that cache forever
+          without ever being checked.
+        - a session list — the normal path.
+
+        This is what makes "benchmark before members" a property of the provider
+        rather than of whatever happens to call it first.
+        """
+        if symbol.upper() == self._benchmark:
+            return None
+        if not cache.cached_range(self._cache_dir, self._benchmark):
+            return []
+        # Deliberately not `or None`: an empty window must stay empty so the
+        # fail-closed branch fires.
+        return list(self.get_calendar(start, end))
+
+    def fetch(
+        self,
+        symbol: str,
+        start: date,
+        end: date,
+        *,
+        calendar: list[date] | None = None,
+    ) -> list[Bar]:
         """Download, normalise and validate. Raises rather than returning partial data."""
         try:
             import yfinance  # noqa: PLC0415
@@ -131,7 +169,7 @@ class YFinanceProvider:
             frame.columns = frame.columns.droplevel(-1)
 
         bars = [self._row_to_bar(symbol, index, row) for index, row in frame.iterrows()]
-        validate_bars(bars, cfg=self._validation)
+        validate_bars(bars, cfg=self._validation, calendar=calendar)
         return bars
 
     @staticmethod

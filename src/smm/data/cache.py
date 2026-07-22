@@ -13,7 +13,7 @@ path, and its idempotency test, run in the network-free default CI.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pyarrow as pa
@@ -37,26 +37,61 @@ _SCHEMA = pa.schema(
 )
 
 
-_COVERAGE_START = b"smm_requested_start"
-_COVERAGE_END = b"smm_requested_end"
+#: Serialised as "start:end,start:end". A **list**, not one span: two disjoint
+#: requests merged into [min, max] would claim the untouched gap between them,
+#: which is the same "silently incomplete" failure this metadata exists to
+#: prevent — just moved from the tail into the middle.
+_COVERAGE_WINDOWS = b"smm_requested_windows"
 
 
 def cache_path(root: Path | str, symbol: str) -> Path:
     return Path(root) / f"{symbol.upper()}.parquet"
 
 
-def _read_coverage(target: Path) -> tuple[date, date] | None:
-    """Read the recorded window from the file's own schema metadata.
+def _read_windows(target: Path) -> list[tuple[date, date]]:
+    """Read the recorded request windows from the file's schema metadata.
 
     Read via ``pq.read_schema``: passing an explicit ``schema=`` to
     ``read_table`` substitutes that schema and drops the file's metadata with
     it, which silently loses the coverage record.
     """
-    meta = pq.read_schema(target).metadata or {}
-    start, end = meta.get(_COVERAGE_START), meta.get(_COVERAGE_END)
-    if not start or not end:
-        return None
-    return date.fromisoformat(start.decode()), date.fromisoformat(end.decode())
+    raw = (pq.read_schema(target).metadata or {}).get(_COVERAGE_WINDOWS)
+    if not raw:
+        return []
+    windows: list[tuple[date, date]] = []
+    for chunk in raw.decode().split(","):
+        if not chunk:
+            continue
+        start, _, end = chunk.partition(":")
+        windows.append((date.fromisoformat(start), date.fromisoformat(end)))
+    return windows
+
+
+def _next_weekday(day: date) -> date:
+    """The first weekday strictly after ``day``."""
+    cursor = day + timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor += timedelta(days=1)
+    return cursor
+
+
+def _merge_windows(windows: list[tuple[date, date]]) -> list[tuple[date, date]]:
+    """Merge windows with no unrequested weekday between them; keep real gaps.
+
+    A Friday-to-Monday gap holds only a weekend, so no session can sit in it and
+    the windows are effectively contiguous. A gap containing a weekday is left
+    open even if that weekday turned out to be a holiday: without a calendar the
+    two cases are indistinguishable, and the safe error is an extra fetch rather
+    than a false claim of coverage.
+    """
+    merged: list[tuple[date, date]] = []
+    for start, end in sorted(windows):
+        if merged and start <= _next_weekday(merged[-1][1]):
+            previous_start, previous_end = merged[-1]
+            merged[-1] = (previous_start, max(previous_end, end))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def _to_table(bars: Sequence[Bar]) -> pa.Table:
@@ -108,25 +143,24 @@ def write_bars(
     target.parent.mkdir(parents=True, exist_ok=True)
 
     merged: dict[date, Bar] = {}
-    coverage = requested
+    windows: list[tuple[date, date]] = []
     if target.exists():
         for existing in _to_bars(pq.read_table(target, schema=_SCHEMA)):
             merged[existing.date] = existing
-        previous = _read_coverage(target)
-        if previous and coverage:
-            coverage = (min(previous[0], coverage[0]), max(previous[1], coverage[1]))
-        elif previous:
-            coverage = previous
+        windows = _read_windows(target)
+    if requested:
+        windows = _merge_windows([*windows, requested])
     for bar in bars:
         merged[bar.date] = bar
 
     ordered = [merged[d] for d in sorted(merged)]
     table = _to_table(ordered)
-    if coverage:
+    if windows:
         table = table.replace_schema_metadata(
             {
-                _COVERAGE_START: coverage[0].isoformat().encode(),
-                _COVERAGE_END: coverage[1].isoformat().encode(),
+                _COVERAGE_WINDOWS: ",".join(
+                    f"{start.isoformat()}:{end.isoformat()}" for start, end in windows
+                ).encode()
             }
         )
     pq.write_table(table, target, compression="snappy")
@@ -159,20 +193,31 @@ def cached_range(root: Path | str, symbol: str) -> tuple[date, date] | None:
     return bars[0].date, bars[-1].date
 
 
-def covered_range(root: Path | str, symbol: str) -> tuple[date, date] | None:
-    """The window this symbol was actually *asked* for, or ``None`` if unrecorded.
+def covered_windows(root: Path | str, symbol: str) -> list[tuple[date, date]]:
+    """Every window this symbol was actually *asked* for, merged and sorted.
 
     Distinct from :func:`cached_range`, which reports the bars present. A gap at
     either edge is invisible to the latter — the provider simply may not have
     had a session there.
+
+    Note this records what was **requested**, not that every session in the
+    window produced a bar. An IPO, a delisting, or a truncated response can
+    still leave holes inside a covered window; catching those needs the
+    validation layer and a benchmark calendar.
     """
     target = cache_path(root, symbol)
     if not target.exists():
-        return None
-    return _read_coverage(target)
+        return []
+    return _merge_windows(_read_windows(target))
 
 
 def covers(root: Path | str, symbol: str, start: date, end: date) -> bool:
-    """Whether ``[start, end]`` lies inside a previously requested window."""
-    coverage = covered_range(root, symbol)
-    return coverage is not None and coverage[0] <= start and coverage[1] >= end
+    """Whether ``[start, end]`` lies inside a **single** recorded window.
+
+    Spanning two windows is not coverage: whatever sits between them was never
+    requested.
+    """
+    return any(
+        window_start <= start and window_end >= end
+        for window_start, window_end in covered_windows(root, symbol)
+    )

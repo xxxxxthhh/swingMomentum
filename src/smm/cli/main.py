@@ -151,6 +151,11 @@ def _ingest_market(
         universe_dir=universe_dir,
         validation=loaded.config.validation,
         max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+        # Must be passed, not left to the default: otherwise ingest fetches the
+        # configured benchmark while get_calendar keeps reading SPY, and the two
+        # diverge the moment market_regime.benchmark changes. A half-wired
+        # parameter is worse than a hardcoded one — it looks configured.
+        benchmark=loaded.config.market_regime.benchmark,
     )
     wanted = [s.upper() for s in symbols] if symbols else provider.get_universe(end)
     # The benchmark is not a universe member — the universe is common stock only

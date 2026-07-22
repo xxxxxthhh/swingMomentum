@@ -109,7 +109,7 @@ def test_empty_calendar_fails_closed() -> None:
     Checking bars against it would reject every one with a misleading message;
     skipping it would silently drop a §12.4 check. It says what is wrong.
     """
-    with pytest.raises(DataValidationError, match="benchmark series is not cached"):
+    with pytest.raises(DataValidationError, match="no cached sessions in"):
         check_session_dates([bar(date(2024, 6, 6))], calendar=[])
 
 

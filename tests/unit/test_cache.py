@@ -77,25 +77,64 @@ def test_cached_range(tmp_path: Path) -> None:
 def test_coverage_is_recorded_and_queryable(tmp_path: Path) -> None:
     window = (BARS[0].date, BARS[-1].date)
     cache.write_bars(tmp_path, "NVDA", BARS, requested=window)
-    assert cache.covered_range(tmp_path, "NVDA") == window
+    assert cache.covered_windows(tmp_path, "NVDA") == [window]
     assert cache.covers(tmp_path, "NVDA", BARS[5].date, BARS[9].date)
 
 
 def test_coverage_absent_when_never_requested(tmp_path: Path) -> None:
     cache.write_bars(tmp_path, "NVDA", BARS)
-    assert cache.covered_range(tmp_path, "NVDA") is None
+    assert cache.covered_windows(tmp_path, "NVDA") == []
     assert not cache.covers(tmp_path, "NVDA", BARS[5].date, BARS[9].date)
 
 
-def test_coverage_widens_across_writes(tmp_path: Path) -> None:
-    """Two adjacent fetches must leave one window spanning both."""
+def test_contiguous_windows_merge(tmp_path: Path) -> None:
+    """Adjacent fetches leave one window: no session can sit between them."""
     cache.write_bars(
         tmp_path, "NVDA", BARS[:100], requested=(BARS[0].date, BARS[99].date)
     )
     cache.write_bars(
         tmp_path, "NVDA", BARS[100:], requested=(BARS[100].date, BARS[-1].date)
     )
-    assert cache.covered_range(tmp_path, "NVDA") == (BARS[0].date, BARS[-1].date)
+    assert cache.covered_windows(tmp_path, "NVDA") == [(BARS[0].date, BARS[-1].date)]
+    assert cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[-1].date)
+
+
+def test_disjoint_windows_do_not_claim_the_gap(tmp_path: Path) -> None:
+    """The bug a single [min, max] span would hide.
+
+    Fetching [d0, d99] and later [d200, d-1] leaves everything between them
+    unrequested. Merging into one span would report the whole range as covered
+    and never re-fetch the hole — the same silently-incomplete failure the
+    metadata exists to prevent, moved from the tail into the middle.
+    """
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[:100], requested=(BARS[0].date, BARS[99].date)
+    )
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[200:], requested=(BARS[200].date, BARS[-1].date)
+    )
+    windows = cache.covered_windows(tmp_path, "NVDA")
+    assert len(windows) == 2
+
+    # Each requested window is covered on its own.
+    assert cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[99].date)
+    assert cache.covers(tmp_path, "NVDA", BARS[200].date, BARS[-1].date)
+    # Spanning the gap, or sitting inside it, is not.
+    assert not cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[-1].date)
+    assert not cache.covers(tmp_path, "NVDA", BARS[120].date, BARS[150].date)
+
+
+def test_a_later_window_can_close_the_gap(tmp_path: Path) -> None:
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[:100], requested=(BARS[0].date, BARS[99].date)
+    )
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[200:], requested=(BARS[200].date, BARS[-1].date)
+    )
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[100:200], requested=(BARS[100].date, BARS[199].date)
+    )
+    assert cache.covered_windows(tmp_path, "NVDA") == [(BARS[0].date, BARS[-1].date)]
     assert cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[-1].date)
 
 
@@ -103,7 +142,7 @@ def test_coverage_survives_a_write_without_a_window(tmp_path: Path) -> None:
     """A later metadata-less write must not erase what was already proven."""
     cache.write_bars(tmp_path, "NVDA", BARS, requested=(BARS[0].date, BARS[-1].date))
     cache.write_bars(tmp_path, "NVDA", [BARS[10]])
-    assert cache.covered_range(tmp_path, "NVDA") == (BARS[0].date, BARS[-1].date)
+    assert cache.covered_windows(tmp_path, "NVDA") == [(BARS[0].date, BARS[-1].date)]
 
 
 def test_partial_coverage_is_not_claimed(tmp_path: Path) -> None:

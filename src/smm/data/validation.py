@@ -80,8 +80,9 @@ def check_session_dates(bars: Sequence[Bar], *, calendar: Iterable[date] | None 
         # Checking against it would reject every bar with a misleading message,
         # and skipping it would silently drop a §12.4 check. Say what is wrong.
         _fail(
-            "empty trading calendar: the benchmark series is not cached, so "
-            "sessions cannot be verified — ingest the benchmark first"
+            "empty trading calendar: the benchmark has no cached sessions in "
+            "this window — it was either never ingested, or ingested for a "
+            "different range. Sessions cannot be verified either way."
         )
     for bar in bars:
         if bar.date not in sessions:

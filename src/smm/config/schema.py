@@ -173,6 +173,7 @@ class StopSection(BaseModel):
 class RiskSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    new_entries_enabled: bool
     risk_on_per_trade: float = Field(ge=0, lt=1)
     neutral_per_trade: float = Field(ge=0, lt=1)
     risk_off_per_trade: float = Field(ge=0, lt=1)
@@ -183,6 +184,13 @@ class RiskSection(BaseModel):
     risk_on_max_exposure: float = Field(ge=0, le=1)
     neutral_max_exposure: float = Field(ge=0, le=1)
     risk_off_max_exposure: float = Field(ge=0, le=1)
+
+    @field_validator("risk_off_per_trade")
+    @classmethod
+    def risk_off_never_opens_new_positions(cls, value: float) -> float:
+        if value != 0:
+            raise ValueError("risk_off_per_trade must remain 0 in SMM-V1.0.0")
+        return value
 
 
 class ExitSection(BaseModel):

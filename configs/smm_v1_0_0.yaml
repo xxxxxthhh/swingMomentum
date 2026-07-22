@@ -111,6 +111,8 @@ stop:
   max_stop_distance_atr: 2.5
 
 risk:
+  # Operational safety gate (M5 ADR): required, never defaults fail-open.
+  new_entries_enabled: true
   risk_on_per_trade: 0.0050
   neutral_per_trade: 0.0025
   risk_off_per_trade: 0.0

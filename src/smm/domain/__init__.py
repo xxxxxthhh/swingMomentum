@@ -11,7 +11,9 @@ from smm.domain.identity import make_logical_signal_id, make_setup_key
 from smm.domain.models import (
     ALLOWED_SIGNAL_TRANSITIONS,
     Bar,
+    EligibleCandidate,
     OrderPlan,
+    PortfolioSnapshot,
     Position,
     PrintBar,
     RiskDecision,
@@ -24,6 +26,7 @@ from smm.domain.views import AdjustedBar, TradeableBar, to_adjusted, to_tradeabl
 
 __all__ = [
     "Bar",
+    "EligibleCandidate",
     "PrintBar",
     "AdjustedBar",
     "TradeableBar",
@@ -31,6 +34,7 @@ __all__ = [
     "to_tradeable",
     "Signal",
     "OrderPlan",
+    "PortfolioSnapshot",
     "Position",
     "Trade",
     "RiskDecision",

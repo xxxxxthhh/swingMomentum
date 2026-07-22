@@ -18,7 +18,7 @@ Personal **Swing Momentum** trading system: constitution-driven rules, daily sca
 
 ---
 
-**Implementation status:** Phase 0 foundation done. Phase 1 **M1** in review (real market data, §12.4 validation, Parquet cache, dated universe snapshots, deterministic synthetic paths). Next: M2 features + regime → M3/M4 MVP-A. **No live auto-trading.**
+**Implementation status:** Phase 0, M1 market data, and M2 features/regime are complete. The M3 lifecycle contract is accepted; next is Watchlist + Trigger + signal persistence, followed by the M4 MVP-A daily report. **No live auto-trading.**
 
 ## Docs map
 
@@ -73,14 +73,14 @@ pytest -m network -o addopts=""        # opt-in, hits Yahoo
 
 - Strategy parameters: [`configs/smm_v1_0_0.yaml`](./configs/smm_v1_0_0.yaml)
 - Universe snapshots: [`configs/universe/`](./configs/universe/) (dated, with survivorship disclaimer)
-- Domain types: `src/smm/domain/` — note the `AdjustedBar` / `TradeableBar` split
+- Domain types: `src/smm/domain/` — provider-native `Bar`, feature-only `AdjustedBar`, and fill-only `PrintBar` / `TradeableBar`
 - Synthetic market data: `src/smm/data/generator.py` (the generator is the truth source, not CSVs)
 - Research: `experiments/`, `notebooks/` (read-only analytics)
 
-**Price series:** constitution §12.1 requires two. Features read the adjusted
-view, fills and stops read the tradeable view, and the two views have
-non-overlapping attribute surfaces so mixing them is an `AttributeError` rather
-than a missed review.
+**Price series:** constitution §12.1 requires two. Features read an adjusted
+view derived from provider-native bars. Fills and stops accept only a separate
+true-print `PrintBar`; Yahoo's split-adjusted OHLC cannot cross that boundary.
+The attribute surfaces remain non-overlapping so mixing them fails in code.
 
 **Config hash:** SHA-256 of canonical JSON (`sort_keys`, compact separators) from the validated pydantic model — see `smm.config.loader`.
 

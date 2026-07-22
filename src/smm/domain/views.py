@@ -1,10 +1,10 @@
-"""Price-series consumption boundary (ADR 2026-07-22 §3.3).
+"""Price-series consumption boundary (ADR 2026-07-22 §3.3 and §5.3).
 
 Constitution §12.1 requires two price series and forbids mixing them: returns,
 moving averages, ATR and momentum use the adjusted series; simulated fills and
-stops use the tradeable series. The failure mode this module exists to prevent
-is the silent one — momentum computed on ``adj_close`` while ATR is computed on
-raw ``high``/``low``.
+stops use true historical prints. Provider-native OHLC is not necessarily the
+latter — Yahoo adjusts historical OHLC for splits — so the two sides originate
+from different domain types.
 
 Rather than rely on code review, the two consumers get **views with
 non-overlapping attribute surfaces**:
@@ -15,8 +15,8 @@ non-overlapping attribute surfaces**:
   ``adj_*`` at all.
 
 Reaching across the boundary is therefore an ``AttributeError``, not a
-judgement call. Both are ``slots=True`` so no reference to the source
-:class:`~smm.domain.models.Bar` survives on the view.
+judgement call. Both are ``slots=True`` so no reference to either source model
+survives on the view.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date as _date
 
-from smm.domain.models import Bar
+from smm.domain.models import Bar, PrintBar
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +71,10 @@ def to_adjusted(bar: Bar) -> AdjustedBar:
     )
 
 
-def to_tradeable(bar: Bar) -> TradeableBar:
-    """Project the tradeable view, dropping the adjusted series entirely."""
+def to_tradeable(bar: PrintBar) -> TradeableBar:
+    """Project a verified historical print into the fill/stop surface."""
+    if not isinstance(bar, PrintBar):
+        raise TypeError("to_tradeable requires PrintBar, not a provider-native Bar")
     return TradeableBar(
         symbol=bar.symbol,
         date=bar.date,

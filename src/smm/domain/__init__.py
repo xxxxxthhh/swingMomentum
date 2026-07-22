@@ -13,6 +13,7 @@ from smm.domain.models import (
     Bar,
     OrderPlan,
     Position,
+    PrintBar,
     RiskDecision,
     Signal,
     StrategyIdentity,
@@ -23,6 +24,7 @@ from smm.domain.views import AdjustedBar, TradeableBar, to_adjusted, to_tradeabl
 
 __all__ = [
     "Bar",
+    "PrintBar",
     "AdjustedBar",
     "TradeableBar",
     "to_adjusted",

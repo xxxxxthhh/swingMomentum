@@ -20,9 +20,10 @@ AAPL 4:1 2020-08-31, TSLA 3:1 2022-08-25), with ``auto_adjust=False``:
 Two consequences worth stating plainly:
 
 1. The ADR calls the primary series "unadjusted". For this provider that is
-   inaccurate: it is split-adjusted, dividend-unadjusted. Recovering the price
-   that actually traded needs the ``Stock Splits`` action column. This matters
-   for MVP-B fills and stops, not for M1 or M2, and is flagged for review.
+   inaccurate: it is split-adjusted, dividend-unadjusted. MVP-B therefore uses
+   a separate ``PrintBar`` contract whose producer must rebuild true prints
+   from the ``Stock Splits`` action history. This provider deliberately returns
+   only ``Bar`` and cannot feed fills or stops directly.
 2. The relative-volume contamination that ADR §3.4 was written to guard against
    **does not occur with this provider**, because volume is pre-adjusted. The
    split check in :mod:`smm.data.validation` is retained as a guard against a

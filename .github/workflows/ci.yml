@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, not only those targeting main. The base-branch filter
+  # silently skipped CI on stacked PRs — a change based on another open branch
+  # got no checks at all, which looks identical to "no checks configured".
   pull_request:
-    branches: [main]
 
 jobs:
   test:

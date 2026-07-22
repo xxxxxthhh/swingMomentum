@@ -13,7 +13,7 @@ path, and its idempotency test, run in the network-free default CI.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pyarrow as pa
@@ -37,8 +37,61 @@ _SCHEMA = pa.schema(
 )
 
 
+#: Serialised as "start:end,start:end". A **list**, not one span: two disjoint
+#: requests merged into [min, max] would claim the untouched gap between them,
+#: which is the same "silently incomplete" failure this metadata exists to
+#: prevent — just moved from the tail into the middle.
+_COVERAGE_WINDOWS = b"smm_requested_windows"
+
+
 def cache_path(root: Path | str, symbol: str) -> Path:
     return Path(root) / f"{symbol.upper()}.parquet"
+
+
+def _read_windows(target: Path) -> list[tuple[date, date]]:
+    """Read the recorded request windows from the file's schema metadata.
+
+    Read via ``pq.read_schema``: passing an explicit ``schema=`` to
+    ``read_table`` substitutes that schema and drops the file's metadata with
+    it, which silently loses the coverage record.
+    """
+    raw = (pq.read_schema(target).metadata or {}).get(_COVERAGE_WINDOWS)
+    if not raw:
+        return []
+    windows: list[tuple[date, date]] = []
+    for chunk in raw.decode().split(","):
+        if not chunk:
+            continue
+        start, _, end = chunk.partition(":")
+        windows.append((date.fromisoformat(start), date.fromisoformat(end)))
+    return windows
+
+
+def _next_weekday(day: date) -> date:
+    """The first weekday strictly after ``day``."""
+    cursor = day + timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor += timedelta(days=1)
+    return cursor
+
+
+def _merge_windows(windows: list[tuple[date, date]]) -> list[tuple[date, date]]:
+    """Merge windows with no unrequested weekday between them; keep real gaps.
+
+    A Friday-to-Monday gap holds only a weekend, so no session can sit in it and
+    the windows are effectively contiguous. A gap containing a weekday is left
+    open even if that weekday turned out to be a holiday: without a calendar the
+    two cases are indistinguishable, and the safe error is an extra fetch rather
+    than a false claim of coverage.
+    """
+    merged: list[tuple[date, date]] = []
+    for start, end in sorted(windows):
+        if merged and start <= _next_weekday(merged[-1][1]):
+            previous_start, previous_end = merged[-1]
+            merged[-1] = (previous_start, max(previous_end, end))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def _to_table(bars: Sequence[Bar]) -> pa.Table:
@@ -63,11 +116,22 @@ def _to_bars(table: pa.Table) -> list[Bar]:
     return [Bar(**row) for row in rows]
 
 
-def write_bars(root: Path | str, symbol: str, bars: Sequence[Bar]) -> Path:
+def write_bars(
+    root: Path | str,
+    symbol: str,
+    bars: Sequence[Bar],
+    *,
+    requested: tuple[date, date] | None = None,
+) -> Path:
     """Merge ``bars`` into the symbol's cache file, newest write winning per session.
 
     Merging rather than appending is what makes a re-run idempotent: the same
     session arriving twice must not become two rows.
+
+    ``requested`` is the window that was asked for, recorded in file metadata
+    and widened across writes. It answers "is this range complete?" exactly,
+    which the bar dates alone cannot: a series that legitimately has no bar on
+    the last requested day is indistinguishable from one that was truncated.
     """
     if not bars:
         raise DataValidationError(f"refusing to cache an empty series for {symbol}")
@@ -79,14 +143,27 @@ def write_bars(root: Path | str, symbol: str, bars: Sequence[Bar]) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
 
     merged: dict[date, Bar] = {}
+    windows: list[tuple[date, date]] = []
     if target.exists():
         for existing in _to_bars(pq.read_table(target, schema=_SCHEMA)):
             merged[existing.date] = existing
+        windows = _read_windows(target)
+    if requested:
+        windows = _merge_windows([*windows, requested])
     for bar in bars:
         merged[bar.date] = bar
 
     ordered = [merged[d] for d in sorted(merged)]
-    pq.write_table(_to_table(ordered), target, compression="snappy")
+    table = _to_table(ordered)
+    if windows:
+        table = table.replace_schema_metadata(
+            {
+                _COVERAGE_WINDOWS: ",".join(
+                    f"{start.isoformat()}:{end.isoformat()}" for start, end in windows
+                ).encode()
+            }
+        )
+    pq.write_table(table, target, compression="snappy")
     return target
 
 
@@ -114,3 +191,33 @@ def cached_range(root: Path | str, symbol: str) -> tuple[date, date] | None:
     if not bars:
         return None
     return bars[0].date, bars[-1].date
+
+
+def covered_windows(root: Path | str, symbol: str) -> list[tuple[date, date]]:
+    """Every window this symbol was actually *asked* for, merged and sorted.
+
+    Distinct from :func:`cached_range`, which reports the bars present. A gap at
+    either edge is invisible to the latter — the provider simply may not have
+    had a session there.
+
+    Note this records what was **requested**, not that every session in the
+    window produced a bar. An IPO, a delisting, or a truncated response can
+    still leave holes inside a covered window; catching those needs the
+    validation layer and a benchmark calendar.
+    """
+    target = cache_path(root, symbol)
+    if not target.exists():
+        return []
+    return _merge_windows(_read_windows(target))
+
+
+def covers(root: Path | str, symbol: str, start: date, end: date) -> bool:
+    """Whether ``[start, end]`` lies inside a **single** recorded window.
+
+    Spanning two windows is not coverage: whatever sits between them was never
+    requested.
+    """
+    return any(
+        window_start <= start and window_end >= end
+        for window_start, window_end in covered_windows(root, symbol)
+    )

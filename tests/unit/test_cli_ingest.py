@@ -107,3 +107,33 @@ def test_market_ingest_always_includes_the_benchmark(tmp_path: Path) -> None:
 
     assert requested[0] == "SPY", f"benchmark must be ingested first, got {requested[:3]}"
     assert set(requested) == {"SPY", "AAPL", "MSFT"}
+
+
+def test_market_ingest_passes_the_configured_benchmark(tmp_path: Path) -> None:
+    """A half-wired parameter is worse than a hardcoded one: ingest would fetch
+    the configured benchmark while get_calendar kept reading the SPY default."""
+    import smm.data.yfinance_provider as yp
+    from smm.cli.main import _ingest_market
+    from smm.config.loader import load_config
+
+    seen: dict[str, object] = {}
+
+    class StubProvider:
+        def __init__(self, **kwargs: object) -> None:
+            seen.update(kwargs)
+
+        def get_universe(self, as_of: date) -> list[str]:
+            return ["AAPL"]
+
+        def get_daily_bars(self, symbol: str, start: date, end: date) -> list[object]:
+            return []
+
+    original = yp.YFinanceProvider
+    yp.YFinanceProvider = StubProvider  # type: ignore[misc]
+    try:
+        loaded = load_config(None)
+        _ingest_market(loaded, tmp_path, date(2026, 7, 22), date(2025, 7, 22), None)
+    finally:
+        yp.YFinanceProvider = original  # type: ignore[misc]
+
+    assert seen["benchmark"] == loaded.config.market_regime.benchmark

@@ -205,19 +205,21 @@ def assert_session_continuity(
         raise DataValidationError(
             f"provider calendar does not cover the latest sealed batch {latest}"
         )
-    latest_index = ordered.index(latest)
-    if latest_index == len(ordered) - 1:
-        raise DataValidationError(f"no provider session follows the latest seal {latest}")
-    expected_next = ordered[latest_index + 1]
-    if as_of == expected_next:
-        return
+    # Checked before "what's next": if as_of is already behind latest, no
+    # amount of calendar reach-forward changes the answer, and a calendar
+    # that happens to end exactly at latest must not be misread as "no
+    # session follows" when the real problem is a backfill attempt.
     if as_of < latest:
         raise DataValidationError(
             f"as_of {as_of} precedes the latest sealed batch {latest}; backfill is forbidden"
         )
+    latest_index = ordered.index(latest)
+    expected_next = ordered[latest_index + 1] if latest_index + 1 < len(ordered) else None
+    if as_of == expected_next:
+        return
     raise DataValidationError(
         f"as_of {as_of} skips one or more sessions after the latest seal {latest}; "
-        f"expected {expected_next}"
+        f"expected {expected_next if expected_next is not None else 'a later provider session'}"
     )
 
 

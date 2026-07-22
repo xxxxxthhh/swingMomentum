@@ -127,12 +127,14 @@ def run_daily(
     manifest_file = day_dir / "manifest.json"
 
     latest_seal = latest_sealed_as_of(root)
-    # The calendar must cover both the continuity gate's need (back to the
-    # latest seal) and the scanner's trailing trigger/hard-filter window --
-    # two different requirements with two different reach-backs.
+    # The calendar must cover the continuity gate's need (back to, and
+    # through, the latest seal -- which may be *after* `session` when this
+    # call turns out to be an illegal backfill) as well as the scanner's
+    # trailing trigger/hard-filter window. Three different reach requirements.
     bars_start = session - timedelta(days=int(loaded.config.features.min_history_bars * 1.6) + 30)
     calendar_start = min(bars_start, (latest_seal or session) - timedelta(days=10))
-    sessions = provider.get_calendar(calendar_start, session)
+    calendar_end = max(session, latest_seal) if latest_seal is not None else session
+    sessions = provider.get_calendar(calendar_start, calendar_end)
     assert_session_continuity(root, as_of=session, sessions=sessions)
 
     member_symbols = sorted({s.upper() for s in symbols})

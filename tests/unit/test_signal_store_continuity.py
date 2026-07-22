@@ -119,8 +119,16 @@ def test_calendar_must_be_sorted_and_unique(tmp_path) -> None:
         assert_session_continuity(tmp_path, as_of=sessions[0], sessions=[*sessions, sessions[0]])
 
 
-def test_no_session_follows_the_latest_seal_fails_closed(tmp_path) -> None:
+def test_backfill_is_diagnosed_correctly_even_when_latest_is_the_calendars_last_session(
+    tmp_path,
+) -> None:
+    """A calendar that happens to end exactly at the latest seal must not be
+    misread as "no session follows" when the real problem is that `as_of`
+    is earlier than the seal -- backfill, not a calendar-reach issue. The
+    backfill check must run before any "what comes next" logic, since an
+    earlier `as_of` never needs to know what comes after `latest` at all.
+    """
     sessions = _weekdays(date(2024, 1, 2), 3)
     _seal(tmp_path, sessions[-1])  # sealed date is the calendar's last session
-    with pytest.raises(DataValidationError, match="no provider session follows"):
+    with pytest.raises(DataValidationError, match="backfill"):
         assert_session_continuity(tmp_path, as_of=sessions[0], sessions=sessions)

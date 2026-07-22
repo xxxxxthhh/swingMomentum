@@ -16,5 +16,6 @@
 - [2026-07-22_m3_watchlist_and_signal_lifecycle.md](./2026-07-22_m3_watchlist_and_signal_lifecycle.md)（accepted）— M3 Watchlist、信号身份与生命周期持久化
 - [2026-07-22_m4_signal_report_and_daily_task.md](./2026-07-22_m4_signal_report_and_daily_task.md)（accepted；rev.2）— M4 信号日报、连续 session 日任务与可复现 artifact bundle
 - [2026-07-22_m5_risk_engine_and_planned_sizing.md](./2026-07-22_m5_risk_engine_and_planned_sizing.md)（accepted；rev.2）— M5 风险引擎、计划仓位、批内预算与生命周期边界
+- [2026-07-22_m6_paper_broker_contract.md](./2026-07-22_m6_paper_broker_contract.md)（proposed）— M6 true-print、Paper Broker、退出、人工 SKIP 与熔断契约
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

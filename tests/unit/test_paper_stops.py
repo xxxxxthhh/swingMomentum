@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from smm.config.loader import load_config
 from smm.core.errors import DataValidationError
+from smm.domain.enums import OrderSide
 from smm.domain.models import PrintBar
 from smm.domain.views import TradeableBar
 from smm.paper.stops import (
@@ -176,4 +177,16 @@ def test_stop_assessment_model_rejects_unrecognized_stopped_reason() -> None:
     values["reason_codes"] = ("paper_stop_not_triggered",)
 
     with pytest.raises(ValidationError, match="recognized stop reason"):
+        StopExitAssessment(**values)
+
+
+def test_stop_assessment_model_rejects_non_sell_execution_quote() -> None:
+    stopped = assess(bar=tradeable_bar(low=96.0))
+    assert stopped.execution_quote is not None
+    values = stopped.model_dump()
+    values["execution_quote"] = stopped.execution_quote.model_copy(
+        update={"side": OrderSide.BUY}
+    )
+
+    with pytest.raises(ValidationError, match="SELL quote"):
         StopExitAssessment(**values)

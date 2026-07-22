@@ -9,7 +9,7 @@
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§16 硬过滤、§17 动量、§23 突破信号） |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)（M3/M4、§2.1 状态机、§2.2 Watchlist） |
 | 关联决策 | [M1](./2026-07-22_m1_data_provider_and_universe.md)、[M2](./2026-07-22_m2_feature_engine_and_regime.md) |
-| 变更摘要 | 修正 setup_key 身份缺陷；冻结 relative_volume 口径、watchlist 过期语义、状态持久化模型 |
+| 变更摘要 | 修正 setup_key 身份缺陷；冻结 relative_volume 口径、watchlist 过期语义、状态持久化模型；rev.2 钉死过期边界、`DETECTED` 路径、幂等语义、触发公式与 `TotalScore` 表态 |
 
 ---
 
@@ -78,7 +78,7 @@ config 已有 `signal.watchlist_expire_bars: 20`。
 |------|------|
 | 计数单位 | **交易日（session）**，非日历日。休市不消耗观察窗口 |
 | 起点 | 进入 watchlist 当日（该日计为第 0 根） |
-| 到期 | 满 `watchlist_expire_bars` 仍未触发 → `expired`（终态） |
+| 到期 | 满 `watchlist_expire_bars` 仍未触发 → `expired`（终态）。精确边界与评估顺序见 [R1](#r1-过期边界与同一-as_of-的评估顺序) |
 | 硬过滤中途失效 | 立即 `expired`，记 reason code；不等待到期 |
 | 过期后重新合格 | **新的 logical signal**（新 setup_key，见 §1） |
 
@@ -97,7 +97,7 @@ config 已有 `signal.watchlist_expire_bars: 20`。
 
 **这是对 Plan v1.1 §3「存储 Parquet + SQLite」的有意偏离**，请评审确认。若坚持 SQLite，可在同一接口后替换，不影响本 ADR 其余决策。
 
-**幂等要求：** 同一 `as_of` + 同一 config 重跑，**不得**追加重复转移。以 `(signal_id, as_of, to_state)` 去重。
+**幂等要求：** 同一 `as_of` + 同一 config 重跑，**不得**追加重复转移。去重键与冲突处理见 [R3](#r3-幂等语义每个-signal_id-as_of-至多一条转移)。
 
 ### 5. 硬过滤在 M3 应用，评分沿用 M2
 
@@ -116,6 +116,89 @@ min_price / min_avg_dollar_volume_20d
 
 ---
 
+## 边界冻结（rev.2，回应 PR #13 评审）
+
+以下五项在评审中被指出「不写死则实现会分叉」。逐项钉死。
+
+### R1. 过期边界与同一 `as_of` 的评估顺序
+
+```text
+age(as_of) = 从 watchlist 进入日（含）到 as_of（含）之间的 session 数 - 1
+             进入日 age = 0
+观察窗 = age ∈ [0, N-1]，N = signal.watchlist_expire_bars
+```
+
+**观察窗恰好 N 个 session，不是 N+1。** 评审建议的「先判触发、再 `age >= N` → expired」若字面实现，会在 `age = N` 那天多给一次触发机会，`N=20` 时实际可观察 21 个 session，与 `watchlist_expire_bars: 20` 的字面读法不符。此处取**恰好 N**：`age = N` 的那天已在窗外，不再评估触发。
+
+评审「不得本可触发却先被过期」的意图仍然满足——**窗内每一个 session（含 age=0 与 age=N-1）都完整评估触发**，过期只在窗口耗尽后发生。
+
+工作示例（`N=20`，假设该区间无休市）：
+
+| as_of | age | 动作 |
+|-------|-----|------|
+| 2026-03-02（进入日） | 0 | 评估触发；未触发则留在 `WATCHLISTED` |
+| 2026-03-27 | 19 | **窗内最后一次**触发评估 |
+| 2026-03-30 | 20 | 不再评估触发 → `EXPIRED`（`watchlist_expired`） |
+
+同一 `as_of` 上的评估顺序：
+
+```text
+1. 硬过滤是否仍全部通过？  否 → EXPIRED（reason: hard_filter_lost）
+2. 触发条件是否满足？      是 → TRIGGERED（reason: breakout_confirmed）
+3. age >= N？              是 → EXPIRED（reason: watchlist_expired）
+```
+
+**硬过滤先于触发**：宪法 §16 是可执行的前置条件，已失效的标的即使当日突破也不得成为可执行信号。评审只指定了「触发 → 过期」，此处补齐第一步。
+
+### R2. `DETECTED` 语义与同日触发路径
+
+`DETECTED` 是**出生态**，不单独落一行日志；新信号的第一行转移即以 `DETECTED` 为 `from_state`。
+
+| 情景 | 日志中的转移 |
+|------|-------------|
+| 硬过滤通过、当日未突破 | `DETECTED → WATCHLISTED` |
+| 硬过滤通过、**当日已突破 + 量能达标** | `DETECTED → TRIGGERED`（同日，`watchlist_entry` = 该 `as_of`）；不得因「没在池里待过」拒绝 |
+| 硬过滤失败 | 不建 signal，不落日志 |
+| 已在池中、硬过滤中途失效 | `WATCHLISTED → EXPIRED` + reason code |
+
+每种情景恰好一行，无中间跳。Phase 0 的 `WATCHLISTED → DETECTED` 反向边保留在表中，但 **V1 永不发出**。
+
+### R3. 幂等语义：每个 `(signal_id, as_of)` 至多一条转移
+
+采用评审的方案 **R**。`(signal_id, as_of, to_state)` 作为去重键过弱——同日重跑若两次算出不同 `to_state`，两行会并存，重放结果不确定。
+
+| 规则 | 决策 |
+|------|------|
+| 唯一键 | `(signal_id, as_of)`，**至多一条**转移 |
+| 重放定序 | 按 `as_of` 排序即可，无需 `seq` 列（唯一键已保证全序） |
+| 同 config 重跑，结果一致 | **no-op**，不写入 |
+| 同 config 重跑，结果**不一致** | **fail loud**：中止并报告差异，不静默覆盖也不并存 |
+
+R2 的路径设计保证每天至多一次转移，与该唯一键相容（同日触发是单行 `DETECTED → TRIGGERED`）。
+
+**代价（有意接受）：** 上游 bar 修正后重跑会合法地产生差异，从而停在人工裁决上。这与 [#8](https://github.com/xxxxxthhh/swingMomentum/issues/8) 空日历、[#12](https://github.com/xxxxxthhh/swingMomentum/pull/12) 缺 session 的 fail-closed 纪律一致：宁可停，不可静默改写审计链。覆写通道的具体形态属实现 PR。
+
+### R4. 触发公式：用 `high`，不用 `close`
+
+Plan v1.1 §4.5 已定，此处引用并钉死索引口径——实现若写成 `max(close[...])` 会**静默**改变触发集合且不报错：
+
+```text
+close[t] > max(high[t-20 : t])                        # 右开，用 high；不含当日
+RelativeVolume >= signal.relative_volume_min          # 见 §2，分母同样不含当日
+可选：(close[t] - EMA20[t]) / ATR20[t] <= signal.max_extension_atr
+      仅当 signal.extension_filter_enabled 为真
+```
+
+Plan 原文写作 `Close > max(High[-20:-1])`，该切片实为 19 个元素；**以上 `t` 下标形式为准**（宪法 §23「计算前 20 日最高价时不得包含当前交易日」）。
+
+### R5. `TotalScore` 与 `trend_trigger_weight: 0.20`
+
+**M3 不计算 `TotalScore`。** 展示 M2 已有的 `MomentumScore` / `RelativeStrengthScore` 加上触发布尔与延伸值；排名口径仍为 M2 R1，不变。
+
+`scoring.trend_trigger_weight: 0.20` 保留在 config 中（schema 已校验三权重和为 1），**实现不得为它临时发明分子**。Trend/Trigger 质量分的定义延后；届时冻结公式会改变分数，按 M1 ADR §2.4 走 `config_hash` 纪律。
+
+---
+
 ## 范围（V1 明确不做）
 
 | 项 | 状态 |
@@ -131,12 +214,15 @@ min_price / min_avg_dollar_volume_20d
 ## 对 M3 实现的约束
 
 1. 同一 `as_of` + 同一 config 重跑 → 信号实体与状态**逐字节一致**；转移日志不得追加重复行。
-2. 非终态 logical signal 跨日为**续存**，不得每日新建。测试须覆盖「同一 setup 连续 N 日只有一个 logical signal」。
+2. 非终态 logical signal 跨日为**续存**，不得每日新建。测试须覆盖「同一 setup 连续 ≥3 个 session 只有一个 `signal_id`」，且**滚动的 `breakout_level` 日变不得产生新 id**。
 3. 每次转移必须带 reason code；无理由的状态变更视为缺陷。
 4. 触发判定只允许消费 `date <= as_of` 的 bar（沿用 M2 的入口截断）。
 5. 突破位的窗口**不含当日**（宪法 §23）；相对量的均量窗口同样不含当日（§2）。
 6. 所有阈值来自 config。
 7. `EXPIRED` / `CANCELLED` 等终态无出边（Phase 0 已定），实现不得绕过 `assert_signal_transition`。
+8. 缺基准日历或缺 bar 时**不得静默产出触发**——沿用 [#12](https://github.com/xxxxxthhh/swingMomentum/pull/12) 的 session 完整性与 fail-closed 语义。
+9. 合成门禁须覆盖 MVP 切片 §9 的四类用例：突破成功 / 量能不足 / 硬过滤拒绝 / 同一 setup 跨多日。
+10. 修改 `make_setup_key` 时同步废止 `breakout_level` 参数及 `test_setup_key_level_rounding` 一类用例（属 M3 实现 PR，不在本 ADR 分支）。
 
 ---
 
@@ -169,6 +255,8 @@ min_price / min_avg_dollar_volume_20d
 | 相对量分母含当日 | 放量日稀释自己的基准，阈值随幅度漂移 |
 | 过期后复用原 signal_id | 终态复活；且无法回答「这次观察了多久」 |
 | watchlist 过期按日历日 | 长假会凭空消耗观察窗口 |
+| 观察窗 `age ∈ [0, N]`（`age = N` 当天仍评估触发） | 实际可观察 N+1 个 session，与 `watchlist_expire_bars` 的字面读法不符（见 [R1](#r1-过期边界与同一-as_of-的评估顺序)） |
+| 去重键含 `to_state` 或引入 `seq` 列 | 同日多跳会让重放终态取决于定序细节；每日至多一次转移已足够（[R3](#r3-幂等语义每个-signal_id-as_of-至多一条转移)） |
 | 可变状态表 + 日志双写 | 二者不一致是必然会发生的缺陷 |
 | SQLite 存信号状态 | 引入第二套存储引擎；只追加日志已满足需求（**偏离 Plan §3，请裁决**） |
 
@@ -189,3 +277,4 @@ min_price / min_avg_dollar_volume_20d
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-22 | proposed | M3 实现前提交评审 |
+| 2026-07-22 | proposed (rev.2) | 回应 PR #13 评审：新增 R1 过期边界与评估顺序、R2 `DETECTED` 与同日触发、R3 幂等语义、R4 触发用 `high`、R5 `TotalScore` 表态；补充实现约束 8–10 |

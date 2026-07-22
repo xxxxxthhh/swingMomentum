@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from smm.domain.models import Bar
+from smm.domain.models import Bar, PrintBar
 from smm.domain.views import AdjustedBar, TradeableBar, to_adjusted, to_tradeable
 
 
@@ -26,6 +26,18 @@ def make_bar(*, adj_factor: float = 0.98) -> Bar:
         volume=1_000_000,
         adj_close=close * adj_factor,
         adj_factor=adj_factor,
+    )
+
+
+def make_print_bar() -> PrintBar:
+    return PrintBar(
+        symbol="NVDA",
+        date=date(2024, 6, 7),
+        open=980.0,
+        high=1010.0,
+        low=970.0,
+        close=1000.0,
+        volume=100_000,
     )
 
 
@@ -88,7 +100,7 @@ def test_feature_side_cannot_reach_raw_prices() -> None:
 
 def test_fill_side_cannot_reach_adjusted_prices() -> None:
     """The tradeable view must not expose the adjusted series at all."""
-    view = to_tradeable(make_bar())
+    view = to_tradeable(make_print_bar())
     assert isinstance(view, TradeableBar)
     for forbidden in ("adj_close", "adj_factor", "adj_open", "adj_high", "adj_low"):
         assert not hasattr(view, forbidden)
@@ -99,13 +111,19 @@ def test_fill_side_cannot_reach_adjusted_prices() -> None:
 def test_views_hold_no_reference_back_to_bar() -> None:
     """slots=True: no __dict__ smuggling the source Bar across the boundary."""
     adj = to_adjusted(make_bar())
-    trade = to_tradeable(make_bar())
+    trade = to_tradeable(make_print_bar())
     assert not hasattr(adj, "__dict__")
     assert not hasattr(trade, "__dict__")
 
 
-def test_tradeable_view_is_untouched_by_adjustment() -> None:
-    bar = make_bar(adj_factor=0.5)
+def test_tradeable_view_uses_true_print_prices() -> None:
+    bar = make_print_bar()
     view = to_tradeable(bar)
-    assert view.close == bar.close == 100.0
-    assert view.open == 98.0
+    assert view.close == bar.close == 1000.0
+    assert view.open == 980.0
+
+
+def test_provider_native_bar_cannot_enter_fill_side() -> None:
+    """Yahoo's split-adjusted primary series is not a historical print."""
+    with pytest.raises(TypeError, match="PrintBar"):
+        to_tradeable(make_bar())  # type: ignore[arg-type]

@@ -18,12 +18,13 @@ from smm.domain.enums import (
 
 
 class Bar(BaseModel):
-    """Single daily bar carrying both price series required by constitution §12.1.
+    """Provider-native daily bar used by ingestion and feature computation.
 
-    ``open/high/low/close`` are the **tradeable** series (what fills and stops
-    must use). ``adj_close`` is the total-return series (what returns, moving
-    averages and momentum must use); ``adj_factor`` derives the remaining
-    adjusted prices — see :mod:`smm.domain.views`.
+    ``open/high/low/close`` retain the provider's primary series. For Yahoo
+    that series is split-adjusted and is therefore **not** the historical print
+    price required by fills and stops. ``adj_close`` is the total-return series;
+    ``adj_factor`` derives the remaining adjusted prices — see
+    :mod:`smm.domain.views`.
 
     Both adjusted fields are **required**. Defaulting ``adj_close`` to ``close``
     would silently substitute a favourable value for missing data, which ADR
@@ -69,6 +70,37 @@ class Bar(BaseModel):
                 f"{self.adj_factor} != adj_close={self.adj_close}"
             )
             raise ValueError(msg)
+        return self
+
+
+class PrintBar(BaseModel):
+    """OHLCV that actually traded in the stated session.
+
+    This is deliberately a separate domain type rather than another view over
+    :class:`Bar`. A provider-native split-adjusted bar must not become eligible
+    for paper fills merely because it happens to expose the same field names.
+    The MVP-B corporate-action adapter will be responsible for producing these
+    rows from an independently verified split history.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str
+    date: date
+    open: float = Field(gt=0)
+    high: float = Field(gt=0)
+    low: float = Field(gt=0)
+    close: float = Field(gt=0)
+    volume: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def ohlc_consistency(self) -> PrintBar:
+        if self.high < self.low:
+            raise ValueError("high must be >= low")
+        if self.high < max(self.open, self.close):
+            raise ValueError("high must be >= open and close")
+        if self.low > min(self.open, self.close):
+            raise ValueError("low must be <= open and close")
         return self
 
 

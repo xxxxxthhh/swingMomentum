@@ -9,8 +9,9 @@ import pytest
 from smm.config.loader import load_config
 from smm.core.errors import FailClosedError
 from smm.data.generator import breakout_success
+from smm.domain.enums import SignalState
 from smm.features.engine import SymbolFeatures, compute_features
-from smm.scanner.engine import evaluate_hard_filters, evaluate_trigger
+from smm.scanner.engine import evaluate_hard_filters, evaluate_trigger, scan_session
 
 
 @pytest.fixture(scope="module")
@@ -170,3 +171,104 @@ def test_missing_reference_session_fails_closed(loaded, breakout_case) -> None:
             sessions=sessions,
             cfg=loaded.config.signal,
         )
+
+
+def test_scan_result_observation_covers_silent_watchlist_continuation(loaded) -> None:
+    """M4 ADR §5: a day with no transition still needs today's reading.
+
+    Day 1 births WATCHLISTED. Day 2 stays quiet (no transition), but the
+    observation returned for day 2 must reflect day 2's own bar, not day 1's.
+    """
+    path = breakout_success()
+    bars = list(path.bars)
+    assert path.breakout_index is not None
+    as_of = bars[path.breakout_index].date
+    as_of_index = path.breakout_index
+    entry_as_of = bars[as_of_index - 1].date
+    entry_feature = compute_features(bars, as_of=entry_as_of, cfg=loaded.config.features)
+    assert isinstance(entry_feature, SymbolFeatures)
+    feature = compute_features(bars, as_of=as_of, cfg=loaded.config.features)
+    assert isinstance(feature, SymbolFeatures)
+
+    initial = scan_session(
+        as_of=entry_as_of,
+        sessions=[bar.date for bar in bars],
+        symbols=[feature.symbol],
+        features={feature.symbol: entry_feature},
+        bars_by_symbol={feature.symbol: bars},
+        loaded=loaded,
+        prior_transitions=[],
+    )
+    assert initial.transitions[0].to_state is SignalState.WATCHLISTED
+
+    current = bars[as_of_index]
+    quiet = current.model_copy(update={"volume": current.volume * 0.10})
+    quiet_bars = [*bars[:as_of_index], quiet, *bars[as_of_index + 1 :]]
+    silent = scan_session(
+        as_of=as_of,
+        sessions=[bar.date for bar in bars],
+        symbols=[feature.symbol],
+        features={feature.symbol: feature},
+        bars_by_symbol={feature.symbol: quiet_bars},
+        loaded=loaded,
+        prior_transitions=initial.transitions,
+    )
+
+    assert silent.transitions == ()
+    assert feature.symbol in silent.observations
+    expected = evaluate_trigger(
+        quiet_bars,
+        features=feature,
+        as_of=as_of,
+        sessions=[bar.date for bar in bars],
+        cfg=loaded.config.signal,
+    )
+    assert silent.observations[feature.symbol] == expected
+    assert not silent.observations[feature.symbol].triggered
+
+
+def test_scan_result_observation_covers_carried_triggered_signal(loaded, breakout_case) -> None:
+    """M4 ADR residual: open_trigger reads same-day fields, not stale ones.
+
+    Day 1 triggers. Day 2 the scanner never re-touches an already-TRIGGERED
+    signal (no transition), but the observation for day 2 must still exist
+    and reflect day 2's own bar/feature -- not day 1's trigger attributes.
+    """
+    bars, trigger_as_of, feature = breakout_case
+
+    triggered = scan_session(
+        as_of=trigger_as_of,
+        sessions=[bar.date for bar in bars],
+        symbols=[feature.symbol],
+        features={feature.symbol: feature},
+        bars_by_symbol={feature.symbol: bars},
+        loaded=loaded,
+        prior_transitions=[],
+    )
+    assert triggered.transitions[0].to_state is SignalState.TRIGGERED
+
+    trigger_index = next(i for i, bar in enumerate(bars) if bar.date == trigger_as_of)
+    next_day = bars[trigger_index + 1].date
+    next_feature = compute_features(bars, as_of=next_day, cfg=loaded.config.features)
+    assert isinstance(next_feature, SymbolFeatures)
+
+    carried = scan_session(
+        as_of=next_day,
+        sessions=[bar.date for bar in bars],
+        symbols=[feature.symbol],
+        features={feature.symbol: next_feature},
+        bars_by_symbol={feature.symbol: bars},
+        loaded=loaded,
+        prior_transitions=triggered.transitions,
+    )
+
+    assert carried.transitions == ()
+    assert feature.symbol in carried.observations
+    expected = evaluate_trigger(
+        bars,
+        features=next_feature,
+        as_of=next_day,
+        sessions=[bar.date for bar in bars],
+        cfg=loaded.config.signal,
+    )
+    assert carried.observations[feature.symbol] == expected

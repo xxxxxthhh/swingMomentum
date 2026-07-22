@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from smm.core.errors import StateTransitionError
 from smm.domain.enums import (
+    MarketRegime,
     OrderSide,
     PositionState,
     RiskVerdict,
@@ -173,22 +175,155 @@ class Trade(BaseModel):
     r_multiple: float | None = None
 
 
-class RiskDecision(BaseModel):
-    """Output of the risk engine for a candidate signal/order plan."""
+class EligibleCandidate(BaseModel):
+    """Validated M5 input; no market-bar type can cross this seam."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     signal_id: str
-    verdict: RiskVerdict
-    reasons: list[str] = Field(default_factory=list)
-    size: float | None = Field(default=None, ge=0)
-    decided_at: datetime | None = None
+    symbol: str
+    as_of: date
+    strategy_version: str
+    config_hash: str
+    regime: MarketRegime
+    sector: str
+    risk_cluster: str = "unclassified"
+    entry_reference: Decimal = Field(gt=0)
+    stop_reference: Decimal = Field(gt=0)
+    estimated_entry_cost_per_share: Decimal = Field(gt=0)
+    estimated_total_cost_per_share: Decimal = Field(gt=0)
+    momentum_score: float | None = Field(default=None, ge=0, le=100)
+    relative_strength_score: float | None = Field(default=None, ge=0, le=100)
+
+    @field_validator(
+        "signal_id", "symbol", "strategy_version", "config_hash", "sector"
+    )
+    @classmethod
+    def identity_fields_are_nonempty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("identity and sector fields must be non-empty")
+        return value
+
+    @field_validator("risk_cluster", mode="before")
+    @classmethod
+    def normalize_missing_cluster(cls, value: object) -> str:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "unclassified"
+        if not isinstance(value, str):
+            raise ValueError("risk_cluster must be a string or missing")
+        return value
 
     @model_validator(mode="after")
-    def reject_has_no_positive_size(self) -> RiskDecision:
-        if self.verdict == RiskVerdict.REJECT and self.size is not None and self.size > 0:
-            msg = "rejected RiskDecision must not carry positive size"
-            raise ValueError(msg)
+    def validate_price_and_cost_relationships(self) -> EligibleCandidate:
+        if self.entry_reference <= self.stop_reference:
+            raise ValueError("entry_reference must be greater than stop_reference")
+        if self.estimated_total_cost_per_share < self.estimated_entry_cost_per_share:
+            raise ValueError(
+                "estimated_total_cost_per_share must be >= estimated_entry_cost_per_share"
+            )
+        return self
+
+    @property
+    def unit_risk(self) -> Decimal:
+        return (
+            self.entry_reference
+            - self.stop_reference
+            + self.estimated_total_cost_per_share
+        )
+
+    @property
+    def capital_per_share(self) -> Decimal:
+        return self.entry_reference + self.estimated_entry_cost_per_share
+
+
+class PortfolioSnapshot(BaseModel):
+    """Fail-closed money snapshot consumed by the pure M5 risk engine."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    as_of: date
+    account_equity: Decimal = Field(gt=0)
+    available_cash: Decimal = Field(ge=0)
+    gross_exposure_capital: Decimal = Field(ge=0)
+    portfolio_initial_risk: Decimal = Field(ge=0)
+    sector_initial_risk: dict[str, Decimal]
+    cluster_initial_risk: dict[str, Decimal]
+    open_symbols: frozenset[str]
+    reserved_signal_ids: frozenset[str]
+    strategy_version: str
+    config_hash: str
+
+    @field_validator("strategy_version", "config_hash")
+    @classmethod
+    def identity_fields_are_nonempty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("snapshot identity fields must be non-empty")
+        return value
+
+    @field_validator("sector_initial_risk", "cluster_initial_risk")
+    @classmethod
+    def risk_maps_are_nonnegative(cls, values: dict[str, Decimal]) -> dict[str, Decimal]:
+        if any(not key.strip() for key in values):
+            raise ValueError("risk map keys must be non-empty")
+        if any(value < 0 for value in values.values()):
+            raise ValueError("risk map values must be non-negative")
+        return values
+
+    @field_validator("open_symbols", "reserved_signal_ids")
+    @classmethod
+    def identity_sets_are_nonempty(cls, values: frozenset[str]) -> frozenset[str]:
+        if any(not value.strip() for value in values):
+            raise ValueError("snapshot identity sets cannot contain empty values")
+        return values
+
+    @model_validator(mode="after")
+    def validate_money_and_reconciliation(self) -> PortfolioSnapshot:
+        if self.available_cash > self.account_equity:
+            raise ValueError("available_cash cannot exceed account_equity")
+        if self.gross_exposure_capital > self.account_equity:
+            raise ValueError("gross_exposure_capital cannot exceed account_equity")
+        if self.portfolio_initial_risk > self.account_equity:
+            raise ValueError("portfolio_initial_risk cannot exceed account_equity")
+        if sum(self.sector_initial_risk.values(), Decimal(0)) != self.portfolio_initial_risk:
+            raise ValueError("sector_initial_risk does not reconcile to portfolio_initial_risk")
+        if sum(self.cluster_initial_risk.values(), Decimal(0)) != self.portfolio_initial_risk:
+            raise ValueError("cluster_initial_risk does not reconcile to portfolio_initial_risk")
+        return self
+
+
+class RiskDecision(BaseModel):
+    """Deterministic M5 plan decision; never an order or fill."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    signal_id: str
+    symbol: str
+    as_of: date
+    strategy_version: str
+    config_hash: str
+    verdict: RiskVerdict
+    reason_codes: tuple[str, ...] = Field(min_length=1)
+    quantity: int = Field(ge=0)
+    entry_reference: Decimal = Field(gt=0)
+    stop_reference: Decimal = Field(gt=0)
+    unit_risk: Decimal = Field(gt=0)
+    planned_capital: Decimal = Field(ge=0)
+    planned_initial_risk: Decimal = Field(ge=0)
+    sector: str
+    risk_cluster: str
+    regime: MarketRegime
+
+    @model_validator(mode="after")
+    def verdict_matches_planned_size(self) -> RiskDecision:
+        if any(not code.strip() for code in self.reason_codes):
+            raise ValueError("reason_codes must be non-empty strings")
+        if len(set(self.reason_codes)) != len(self.reason_codes):
+            raise ValueError("reason_codes must be unique")
+        if self.verdict == RiskVerdict.ACCEPT:
+            if self.quantity < 1 or self.planned_capital <= 0 or self.planned_initial_risk <= 0:
+                raise ValueError("accepted RiskDecision must carry a positive plan")
+        elif self.quantity != 0 or self.planned_capital != 0 or self.planned_initial_risk != 0:
+            raise ValueError("rejected RiskDecision must not carry positive size")
         return self
 
 
@@ -201,7 +336,13 @@ ALLOWED_SIGNAL_TRANSITIONS: dict[SignalState, frozenset[SignalState]] = {
         {SignalState.TRIGGERED, SignalState.EXPIRED, SignalState.DETECTED}
     ),
     SignalState.TRIGGERED: frozenset(
-        {SignalState.ELIGIBLE, SignalState.EXPIRED, SignalState.CANCELLED}
+        {
+            SignalState.ELIGIBLE,
+            SignalState.RISK_ACCEPTED,
+            SignalState.RISK_REJECTED,
+            SignalState.EXPIRED,
+            SignalState.CANCELLED,
+        }
     ),
     SignalState.ELIGIBLE: frozenset(
         {

@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from smm.core.errors import StateTransitionError
-from smm.domain.enums import RiskVerdict, SignalState
+from smm.domain.enums import MarketRegime, RiskVerdict, SignalState
 from smm.domain.models import (
     ALLOWED_SIGNAL_TRANSITIONS,
     Bar,
@@ -68,20 +68,51 @@ def test_risk_reject_no_positive_size() -> None:
     with pytest.raises(ValueError, match="positive size"):
         RiskDecision(
             signal_id="x",
+            symbol="X",
+            as_of=date(2024, 1, 2),
+            strategy_version="SMM-V1.0.0",
+            config_hash="a" * 64,
             verdict=RiskVerdict.REJECT,
-            reasons=["heat"],
-            size=100,
+            reason_codes=("risk_portfolio_heat_limit_reached",),
+            quantity=100,
+            entry_reference=100,
+            stop_reference=90,
+            unit_risk=11,
+            planned_capital=10100,
+            planned_initial_risk=1100,
+            sector="information_technology",
+            risk_cluster="growth",
+            regime=MarketRegime.RISK_ON,
         )
 
 
 def test_risk_reject_size_none_ok() -> None:
-    d = RiskDecision(signal_id="x", verdict=RiskVerdict.REJECT, reasons=["heat"], size=None)
+    d = RiskDecision(
+        signal_id="x",
+        symbol="X",
+        as_of=date(2024, 1, 2),
+        strategy_version="SMM-V1.0.0",
+        config_hash="a" * 64,
+        verdict=RiskVerdict.REJECT,
+        reason_codes=("risk_portfolio_heat_limit_reached",),
+        quantity=0,
+        entry_reference=100,
+        stop_reference=90,
+        unit_risk=11,
+        planned_capital=0,
+        planned_initial_risk=0,
+        sector="information_technology",
+        risk_cluster="growth",
+        regime=MarketRegime.RISK_ON,
+    )
     assert d.verdict is RiskVerdict.REJECT
 
 
 def test_allowed_transition() -> None:
     assert_signal_transition(SignalState.DETECTED, SignalState.WATCHLISTED)
     assert_signal_transition(SignalState.ELIGIBLE, SignalState.RISK_ACCEPTED)
+    assert_signal_transition(SignalState.TRIGGERED, SignalState.RISK_ACCEPTED)
+    assert_signal_transition(SignalState.TRIGGERED, SignalState.RISK_REJECTED)
 
 
 def test_illegal_transition() -> None:

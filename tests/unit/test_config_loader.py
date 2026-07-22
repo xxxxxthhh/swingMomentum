@@ -20,6 +20,7 @@ def test_load_default_config() -> None:
     assert loaded.config.strategy.auto_live_orders is False
     assert loaded.config.scoring.fund_as_filter is True
     assert loaded.config.scoring.fundamental_weight == 0.0
+    assert loaded.config.risk.new_entries_enabled is True
     assert len(loaded.config_hash) == 64
     assert all(c in "0123456789abcdef" for c in loaded.config_hash)
 
@@ -34,6 +35,20 @@ def test_config_hash_stable() -> None:
 def test_invalid_risk_rejected() -> None:
     raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
     raw["risk"]["risk_on_per_trade"] = 1.5  # not in [0, 1)
+    with pytest.raises(ConfigError):
+        load_config_from_mapping(raw)
+
+
+def test_risk_kill_switch_is_required() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    del raw["risk"]["new_entries_enabled"]
+    with pytest.raises(ConfigError):
+        load_config_from_mapping(raw)
+
+
+def test_risk_off_budget_must_remain_zero() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    raw["risk"]["risk_off_per_trade"] = 0.001
     with pytest.raises(ConfigError):
         load_config_from_mapping(raw)
 

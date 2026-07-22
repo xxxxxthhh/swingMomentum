@@ -271,6 +271,8 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
         strategy_version=loaded.version,
         config_hash=loaded.config_hash,
         return_windows=loaded.config.features.return_windows,
+        benchmarks={loaded.config.market_regime.benchmark.upper()}
+        | {etf.upper() for etf in loaded.config.sector_benchmarks.values()},
     )
     return run, written
 

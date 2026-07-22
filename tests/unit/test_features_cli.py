@@ -156,3 +156,39 @@ def test_snapshot_distinguishes_members_from_benchmarks(tmp_path: Path) -> None:
     }
     assert rows["SYNT1"]["role"] == "member"
     assert rows["XLK"]["role"] == "benchmark"
+
+
+def test_benchmark_role_survives_insufficient_history(tmp_path: Path) -> None:
+    """A sector ETF short of history is still a benchmark, not a member.
+
+    Deriving role from the exclusion reason would mislabel it: such an ETF
+    lands in `excluded` rather than `features`, so it never carries the
+    "benchmark" exclusion reason.
+    """
+    import pyarrow.parquet as pq
+
+    from smm.domain.enums import MarketRegime
+    from smm.features.cross_section import CrossSection
+    from smm.features.engine import ExcludedSymbol
+    from smm.features.snapshot import write_snapshot
+
+    short_etf = ExcludedSymbol(
+        symbol="XLU", as_of=AS_OF, reason="insufficient_history", bar_count=17
+    )
+    write_snapshot(
+        tmp_path,
+        as_of=AS_OF,
+        cross_section=CrossSection(
+            as_of=AS_OF, scored={}, ranking_universe=(), excluded_from_ranking={}
+        ),
+        features={},
+        excluded={"XLU": short_etf},
+        regime=MarketRegime.NEUTRAL,
+        strategy_version="SMM-V1.0.0",
+        config_hash="0" * 64,
+        return_windows=[21],
+        benchmarks={"SPY", "XLU"},
+    )
+    rows = {r["symbol"]: r for r in pq.read_table(snapshot_path(tmp_path, AS_OF)).to_pylist()}
+    assert rows["XLU"]["role"] == "benchmark"
+    assert rows["XLU"]["excluded_reason"] == "insufficient_history"

@@ -50,6 +50,7 @@ def write_snapshot(
     strategy_version: str,
     config_hash: str,
     return_windows: list[int],
+    benchmarks: set[str],
 ) -> Path:
     """Write the as-of snapshot, including the symbols that were excluded.
 
@@ -57,6 +58,7 @@ def write_snapshot(
     from today's report" is an auditing question the snapshot should answer by
     itself.
 
+    ``benchmarks`` is the configured set (market benchmark plus sector ETFs).
     Benchmarks get rows too, marked ``benchmark``. They are not ranked, but the
     regime is derived from the benchmark's close and moving averages — without
     those values the snapshot reports a regime that cannot be re-checked from
@@ -68,9 +70,10 @@ def write_snapshot(
         scored = cross_section.scored.get(symbol)
         feature = features.get(symbol)
         gap = excluded.get(symbol)
-        is_benchmark = symbol in cross_section.excluded_from_ranking and (
-            cross_section.excluded_from_ranking[symbol] == "benchmark"
-        )
+        # Derived from config, not from why the symbol was excluded: a sector
+        # ETF short of history lands in `excluded` rather than `features`, and
+        # keying off the exclusion reason would then mislabel it a member.
+        is_benchmark = symbol in benchmarks
         row: dict[str, object] = {
             "symbol": symbol,
             "role": "benchmark" if is_benchmark else "member",

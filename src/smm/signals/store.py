@@ -1,0 +1,272 @@
+"""Atomic Parquet transition log with fail-closed daily batch seals."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import tempfile
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+from smm.core.errors import DataValidationError
+from smm.signals.lifecycle import SignalTransition, latest_transitions
+
+_BATCH = "batch"
+_TRANSITION = "transition"
+_SCHEMA = pa.schema(
+    [
+        ("record_type", pa.string()),
+        ("transition_count", pa.int64()),
+        ("batch_digest", pa.string()),
+        ("signal_id", pa.string()),
+        ("symbol", pa.string()),
+        ("setup_key", pa.string()),
+        ("watchlist_entry", pa.date32()),
+        ("from_state", pa.string()),
+        ("to_state", pa.string()),
+        ("as_of", pa.date32()),
+        ("reason_codes", pa.list_(pa.string())),
+        ("strategy_version", pa.string()),
+        ("config_hash", pa.string()),
+        ("breakout_level", pa.float64()),
+        ("relative_volume", pa.float64()),
+        ("extension_atr", pa.float64()),
+    ]
+)
+_TRANSITION_FIELDS = tuple(SignalTransition.model_fields)
+
+
+@dataclass(frozen=True, slots=True)
+class _BatchSeal:
+    as_of: date
+    strategy_version: str
+    config_hash: str
+    transition_count: int
+    batch_digest: str
+
+
+def transition_path(root: Path | str) -> Path:
+    return Path(root) / "signal_transitions.parquet"
+
+
+def _transition_row(transition: SignalTransition) -> dict[str, object]:
+    values = {name: None for name in _SCHEMA.names}
+    values.update(transition.model_dump())
+    values.update(
+        record_type=_TRANSITION,
+        from_state=transition.from_state.value,
+        to_state=transition.to_state.value,
+    )
+    return values
+
+
+def _seal_row(seal: _BatchSeal) -> dict[str, object]:
+    values = {name: None for name in _SCHEMA.names}
+    values.update(
+        record_type=_BATCH,
+        transition_count=seal.transition_count,
+        batch_digest=seal.batch_digest,
+        as_of=seal.as_of,
+        strategy_version=seal.strategy_version,
+        config_hash=seal.config_hash,
+    )
+    return values
+
+
+def _batch_digest(transitions: Sequence[SignalTransition]) -> str:
+    canonical = [
+        row.model_dump(mode="json")
+        for row in sorted(transitions, key=lambda row: row.signal_id)
+    ]
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _read_store(root: Path | str) -> tuple[list[SignalTransition], dict[date, _BatchSeal]]:
+    target = transition_path(root)
+    if not target.exists():
+        return [], {}
+
+    transitions: list[SignalTransition] = []
+    seals: dict[date, _BatchSeal] = {}
+    for raw in pq.read_table(target).to_pylist():
+        record_type = raw.get("record_type") or _TRANSITION
+        if record_type == _TRANSITION:
+            transitions.append(
+                SignalTransition(**{name: raw.get(name) for name in _TRANSITION_FIELDS})
+            )
+            continue
+        if record_type != _BATCH:
+            raise DataValidationError(f"unknown signal-store record type {record_type!r}")
+        try:
+            seal = _BatchSeal(
+                as_of=raw["as_of"],
+                strategy_version=raw["strategy_version"],
+                config_hash=raw["config_hash"],
+                transition_count=raw["transition_count"],
+                batch_digest=raw["batch_digest"],
+            )
+        except (KeyError, TypeError) as exc:
+            raise DataValidationError("incomplete transition batch seal") from exc
+        if (
+            not isinstance(seal.as_of, date)
+            or not isinstance(seal.strategy_version, str)
+            or not seal.strategy_version
+            or not isinstance(seal.config_hash, str)
+            or not seal.config_hash
+            or not isinstance(seal.transition_count, int)
+            or seal.transition_count < 0
+            or not isinstance(seal.batch_digest, str)
+            or not seal.batch_digest
+        ):
+            raise DataValidationError(f"invalid transition batch seal for as_of={seal.as_of}")
+        if seal.as_of in seals:
+            raise DataValidationError(f"duplicate transition batch seal for as_of={seal.as_of}")
+        seals[seal.as_of] = seal
+
+    transitions.sort(key=lambda row: (row.as_of, row.signal_id))
+    latest_transitions(transitions)
+    for as_of, seal in seals.items():
+        batch = [row for row in transitions if row.as_of == as_of]
+        if len(batch) != seal.transition_count or _batch_digest(batch) != seal.batch_digest:
+            raise DataValidationError(f"corrupt transition batch for as_of={as_of}")
+        if any(
+            row.strategy_version != seal.strategy_version or row.config_hash != seal.config_hash
+            for row in batch
+        ):
+            raise DataValidationError(
+                f"mixed config identity in transition batch for as_of={as_of}"
+            )
+    return transitions, seals
+
+
+def read_transitions(root: Path | str) -> list[SignalTransition]:
+    transitions, _ = _read_store(root)
+    return transitions
+
+
+def _resolve_batch_metadata(
+    transitions: Sequence[SignalTransition],
+    *,
+    as_of: date | None,
+    strategy_version: str | None,
+    config_hash: str | None,
+) -> tuple[date, str, str]:
+    dates = {row.as_of for row in transitions}
+    versions = {row.strategy_version for row in transitions}
+    hashes = {row.config_hash for row in transitions}
+    if len(dates) > 1 or len(versions) > 1 or len(hashes) > 1:
+        raise DataValidationError("one transition append must contain exactly one daily batch")
+    resolved_as_of = as_of if as_of is not None else next(iter(dates), None)
+    resolved_version = (
+        strategy_version if strategy_version is not None else next(iter(versions), None)
+    )
+    resolved_hash = config_hash if config_hash is not None else next(iter(hashes), None)
+    if (
+        not isinstance(resolved_as_of, date)
+        or not isinstance(resolved_version, str)
+        or not resolved_version
+        or not isinstance(resolved_hash, str)
+        or not resolved_hash
+    ):
+        raise DataValidationError(
+            "transition batches require valid as_of, strategy_version, and config_hash"
+        )
+    if dates and dates != {resolved_as_of}:
+        raise DataValidationError("transition batch as_of does not match its rows")
+    if versions and versions != {resolved_version}:
+        raise DataValidationError("transition batch strategy_version does not match its rows")
+    if hashes and hashes != {resolved_hash}:
+        raise DataValidationError("transition batch config_hash does not match its rows")
+    return resolved_as_of, resolved_version, resolved_hash
+
+
+def _write_store(
+    target: Path,
+    transitions: Sequence[SignalTransition],
+    seals: Sequence[_BatchSeal],
+) -> None:
+    records = [
+        *(_seal_row(seal) for seal in sorted(seals, key=lambda seal: seal.as_of)),
+        *(
+            _transition_row(row)
+            for row in sorted(transitions, key=lambda row: (row.as_of, row.signal_id))
+        ),
+    ]
+    records.sort(
+        key=lambda row: (
+            row["as_of"],
+            0 if row["record_type"] == _BATCH else 1,
+            row["signal_id"] or "",
+        )
+    )
+    table = pa.Table.from_pylist(records, schema=_SCHEMA)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp", delete=False
+    ) as handle:
+        temporary = Path(handle.name)
+    try:
+        pq.write_table(table, temporary, compression="snappy")
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def append_transitions(
+    root: Path | str,
+    transitions: Sequence[SignalTransition],
+    *,
+    as_of: date | None = None,
+    strategy_version: str | None = None,
+    config_hash: str | None = None,
+) -> Path:
+    """Atomically seal one daily transition multiset; exact reruns are no-op."""
+    batch = sorted(transitions, key=lambda row: row.signal_id)
+    batch_as_of, batch_version, batch_hash = _resolve_batch_metadata(
+        batch,
+        as_of=as_of,
+        strategy_version=strategy_version,
+        config_hash=config_hash,
+    )
+    keys = {(row.signal_id, row.as_of) for row in batch}
+    if len(keys) != len(batch):
+        raise DataValidationError(f"duplicate transition in batch for as_of={batch_as_of}")
+
+    target = transition_path(root)
+    existing, seals = _read_store(root)
+    existing_batch = [row for row in existing if row.as_of == batch_as_of]
+    seal = seals.get(batch_as_of)
+    if seal is not None:
+        same_identity = (
+            seal.strategy_version == batch_version and seal.config_hash == batch_hash
+        )
+        if not same_identity or existing_batch != batch:
+            raise DataValidationError(
+                f"conflicting transition batch for as_of={batch_as_of}"
+            )
+        return target
+
+    # Files written before batch seals are accepted only when the caller
+    # reproduces their complete as_of multiset; the rewrite then seals it.
+    if existing_batch and existing_batch != batch:
+        raise DataValidationError(f"conflicting transition batch for as_of={batch_as_of}")
+
+    merged = [row for row in existing if row.as_of != batch_as_of]
+    merged.extend(batch)
+    merged.sort(key=lambda row: (row.as_of, row.signal_id))
+    latest_transitions(merged)
+    new_seal = _BatchSeal(
+        as_of=batch_as_of,
+        strategy_version=batch_version,
+        config_hash=batch_hash,
+        transition_count=len(batch),
+        batch_digest=_batch_digest(batch),
+    )
+    _write_store(target, merged, [*seals.values(), new_seal])
+    return target

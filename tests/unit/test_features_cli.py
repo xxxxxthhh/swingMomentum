@@ -122,3 +122,37 @@ def test_top_limits_printed_rows(tmp_path: Path, flag: str) -> None:
     output = run(tmp_path, flag, "2").output
     assert "SYNT1" in output
     assert "SYNT4" not in output
+
+
+def test_snapshot_records_benchmark_feature_rows(tmp_path: Path) -> None:
+    """The regime must be re-checkable from the snapshot alone.
+
+    Reporting a regime without the close and moving averages that produced it
+    leaves an artifact nobody can verify after the fact.
+    """
+    import pyarrow.parquet as pq
+
+    run(tmp_path)
+    rows = {
+        r["symbol"]: r
+        for r in pq.read_table(snapshot_path(tmp_path / "feat", AS_OF)).to_pylist()
+    }
+    spy = rows["SPY"]
+    assert spy["role"] == "benchmark"
+    assert spy["close"] is not None
+    assert spy["sma_fast"] is not None
+    assert spy["sma_slow"] is not None
+    # Risk-On, recomputed from the snapshot's own numbers.
+    assert spy["close"] > spy["sma_fast"] > spy["sma_slow"]
+
+
+def test_snapshot_distinguishes_members_from_benchmarks(tmp_path: Path) -> None:
+    import pyarrow.parquet as pq
+
+    run(tmp_path)
+    rows = {
+        r["symbol"]: r
+        for r in pq.read_table(snapshot_path(tmp_path / "feat", AS_OF)).to_pylist()
+    }
+    assert rows["SYNT1"]["role"] == "member"
+    assert rows["XLK"]["role"] == "benchmark"

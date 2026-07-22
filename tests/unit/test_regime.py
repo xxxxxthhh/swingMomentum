@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,7 @@ from smm.domain.enums import MarketRegime
 from smm.features.engine import ExcludedSymbol, SymbolFeatures, compute_features
 from smm.features.regime import classify_regime, resolve_regime
 
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "smm_v1_0_0.yaml"
 CONFIG = load_config(None).config
 
 
@@ -126,3 +128,31 @@ def test_rising_benchmark_classifies_risk_on() -> None:
     bars = list(synthetic_universe()["SPY"].bars)
     features = compute_features(bars, as_of=bars[-1].date, cfg=CONFIG.features)
     assert classify_regime(features) is MarketRegime.RISK_ON
+
+
+# --- config honesty --------------------------------------------------------
+
+
+def test_config_rejects_unimplemented_regime_conditions() -> None:
+    """risk_on_conditions is declarative; V1 does not interpret it.
+
+    Letting YAML list a predicate nobody reads would mean editing config moves
+    config_hash while behaviour stays put — configurable in appearance only.
+    """
+    import yaml
+
+    from smm.config.loader import load_config_from_mapping
+    from smm.core.errors import ConfigError
+
+    raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    raw["market_regime"]["risk_on_conditions"] = ["close_above_sma_200", "rsi_below_30"]
+    with pytest.raises(ConfigError, match="does not interpret this list"):
+        load_config_from_mapping(raw)
+
+
+def test_shipped_config_matches_the_implementation() -> None:
+    assert sorted(CONFIG.market_regime.risk_on_conditions) == [
+        "close_above_sma_200",
+        "close_above_sma_50",
+        "sma_50_above_sma_200",
+    ]

@@ -56,14 +56,24 @@ def write_snapshot(
     Excluded symbols are recorded rather than dropped: "why is this name absent
     from today's report" is an auditing question the snapshot should answer by
     itself.
+
+    Benchmarks get rows too, marked ``benchmark``. They are not ranked, but the
+    regime is derived from the benchmark's close and moving averages — without
+    those values the snapshot reports a regime that cannot be re-checked from
+    the snapshot alone, which contradicts the point of recording identity at
+    all.
     """
     rows: list[dict[str, object]] = []
-    for symbol in sorted(set(cross_section.scored) | set(excluded)):
+    for symbol in sorted(set(cross_section.scored) | set(excluded) | set(features)):
         scored = cross_section.scored.get(symbol)
         feature = features.get(symbol)
         gap = excluded.get(symbol)
+        is_benchmark = symbol in cross_section.excluded_from_ranking and (
+            cross_section.excluded_from_ranking[symbol] == "benchmark"
+        )
         row: dict[str, object] = {
             "symbol": symbol,
+            "role": "benchmark" if is_benchmark else "member",
             "sector": (scored.sector if scored else None),
             "bar_count": (feature.bar_count if feature else (gap.bar_count if gap else 0)),
             "excluded_reason": (gap.reason if gap else None),

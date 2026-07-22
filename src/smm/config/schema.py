@@ -38,10 +38,38 @@ class UniverseSection(BaseModel):
 
 
 class MarketRegimeSection(BaseModel):
+    """Market regime inputs (constitution §14).
+
+    ``risk_on_conditions`` is **declarative, not a rule engine**. The predicates
+    are implemented in :func:`smm.features.regime.classify_regime`, and V1 does
+    not interpret this list. Rather than let it drift into a lie — editing YAML
+    would change ``config_hash`` while behaviour stayed put, which is exactly
+    the "looks configurable but isn't" trap — the schema pins it to the set that
+    is actually implemented and rejects anything else.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     benchmark: str
     risk_on_conditions: list[str]
+
+    @field_validator("risk_on_conditions")
+    @classmethod
+    def only_the_implemented_conditions(cls, v: list[str]) -> list[str]:
+        implemented = [
+            "close_above_sma_200",
+            "close_above_sma_50",
+            "sma_50_above_sma_200",
+        ]
+        if sorted(v) != sorted(implemented):
+            msg = (
+                f"risk_on_conditions must be exactly {implemented} — V1 does not "
+                f"interpret this list, it is implemented in "
+                f"smm.features.regime.classify_regime. Changing regime logic "
+                f"requires changing that function and bumping the strategy version."
+            )
+            raise ValueError(msg)
+        return v
 
 
 class HardFiltersSection(BaseModel):

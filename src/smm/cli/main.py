@@ -239,7 +239,7 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
         rows = universe_rows(session)
         sectors = {r["symbol"]: r["sector"] for r in rows}
         symbols = sorted(sectors)
-        provider = _CacheOnlyProvider(cache_dir)
+        provider = _CacheOnlyProvider(cache_dir, loaded.config.market_regime.benchmark)
     else:
         from smm.data.universe import load_universe
         from smm.data.yfinance_provider import YFinanceProvider
@@ -296,13 +296,25 @@ def _snapshot_sectors(path: Path | None) -> dict[str, str]:
 class _CacheOnlyProvider:
     """Reads what ingest already cached. No network, no fallback."""
 
-    def __init__(self, cache_dir: Path) -> None:
+    def __init__(self, cache_dir: Path, benchmark: str) -> None:
         self._cache_dir = cache_dir
+        self._benchmark = benchmark.upper()
 
     def get_daily_bars(self, symbol: str, start: date, end: date):
         from smm.data import cache as bar_cache
 
         return bar_cache.read_bars(self._cache_dir, symbol, start, end)
+
+    def get_calendar(self, start: date, end: date) -> list[date]:
+        """Sessions from the cached benchmark, same contract as the real provider.
+
+        Implemented even though the M2 pipeline does not call it yet: a stub
+        missing half the protocol fails the moment anything reaches for it, and
+        the calendar wiring is a live follow-up.
+        """
+        from smm.data import cache as bar_cache
+
+        return [b.date for b in bar_cache.read_bars(self._cache_dir, self._benchmark, start, end)]
 
 
 def main() -> None:

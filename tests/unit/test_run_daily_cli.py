@@ -1,0 +1,68 @@
+"""`smm run-daily` CLI wiring. Offline only."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from smm.cli.main import app
+from smm.config.loader import load_config
+from smm.data.generator import synthetic_universe
+
+runner = CliRunner()
+AS_OF = synthetic_universe()["SPY"].bars[-1].date
+CONFIG = load_config(None)
+
+
+def run(tmp_path: Path, *extra: str):
+    return runner.invoke(
+        app,
+        [
+            "run-daily",
+            "--as-of",
+            AS_OF.isoformat(),
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            *extra,
+        ],
+    )
+
+
+def test_offline_run_writes_the_bundle_and_prints_bucket_counts(tmp_path: Path) -> None:
+    result = run(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "regime:" in result.output
+    assert "new_trigger:" in result.output
+    assert "manifest:" in result.output
+
+    root = tmp_path / "runs" / CONFIG.version / CONFIG.config_hash / AS_OF.isoformat()
+    assert (root / "report.csv").exists()
+    assert (root / "report.md").exists()
+    assert (root / "manifest.json").exists()
+
+
+def test_rerun_is_reported_as_a_noop(tmp_path: Path) -> None:
+    first = run(tmp_path)
+    assert first.exit_code == 0, first.output
+    second = run(tmp_path)
+    assert second.exit_code == 0, second.output
+    assert "no-op" in second.output
+
+
+def test_bad_as_of_is_rejected(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run-daily",
+            "--as-of",
+            "not-a-date",
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+        ],
+    )
+    assert result.exit_code == 2

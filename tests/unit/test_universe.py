@@ -58,7 +58,22 @@ GICS_SECTORS = {
 
 # Benchmarks, not universe members: constitution §10 limits the universe to
 # common stock, and these are ETFs.
-BENCHMARK_ETFS = {"SPY", "QQQ", "XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU"}
+BENCHMARK_ETFS = {
+    "SPY",
+    "QQQ",
+    # The 11 GICS sector proxies from the M2 ADR's sector_benchmarks.
+    "XLK",
+    "XLF",
+    "XLV",
+    "XLY",
+    "XLP",
+    "XLE",
+    "XLI",
+    "XLB",
+    "XLU",
+    "XLRE",
+    "XLC",
+}
 
 
 def shipped_rows() -> list[dict[str, str]]:

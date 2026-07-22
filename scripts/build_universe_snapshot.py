@@ -11,6 +11,9 @@ Usage::
     pip install -e ".[market]" lxml     # pandas + lxml, both manual-only
     python scripts/build_universe_snapshot.py --as-of 2026-07-22
 
+Every symbol is checked against the market-data provider before anything is
+written; pass ``--no-verify`` only when deliberately working offline.
+
 Sources (both read once, by hand):
 
 - S&P 500: Wikipedia "List of S&P 500 companies" — carries **GICS** sectors
@@ -169,10 +172,14 @@ def main() -> None:
         default=Path(__file__).resolve().parents[1] / "configs" / "universe",
         type=Path,
     )
+    # Verification is ON by default: a human who forgets a flag should still
+    # get a checked snapshot, because a bad one poisons every ranking
+    # downstream. Skipping is possible but has to be asked for.
     parser.add_argument(
-        "--verify",
-        action="store_true",
-        help="Check every symbol actually trades before writing (recommended)",
+        "--no-verify",
+        dest="verify",
+        action="store_false",
+        help="Skip the tradeability check (not recommended; offline use only)",
     )
     args = parser.parse_args()
     as_of = date.fromisoformat(args.as_of)

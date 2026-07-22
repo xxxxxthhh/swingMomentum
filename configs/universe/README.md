@@ -77,15 +77,22 @@ Symbols in **both** indices take the real GICS sector from the S&P 500 page.
 
 ### Verification
 
-`--verify` asks the market-data provider whether every symbol actually trades:
+The script asks the market-data provider whether every symbol actually trades,
+**by default** — forgetting a flag must not produce an unchecked snapshot:
 
 ```bash
-python scripts/build_universe_snapshot.py --as-of YYYY-MM-DD --verify
+python scripts/build_universe_snapshot.py --as-of YYYY-MM-DD
 ```
 
 Row-count guards cannot catch one bad ticker hidden among a hundred good ones;
 this can. A fabricated, delisted, or mis-formatted ticker (`BRK.B` instead of
-`BRK-B`) returns no data and the script refuses to write.
+`BRK-B`) returns no data and the script refuses to write. `--no-verify` skips
+it, for deliberate offline use only.
+
+**What this does not prove:** that a symbol is genuinely an index constituent.
+A mis-scraped ticker that happens to trade would still pass. It is a second
+gate, not an official membership source — if membership is ever disputed, cross
+-check against the index provider's own list.
 
 Refreshing is a human act: run the script with `--verify`, read the diff, and
 confirm the counts still reconcile before committing.

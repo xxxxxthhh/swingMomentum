@@ -70,11 +70,22 @@ def check_session_dates(bars: Sequence[Bar], *, calendar: Iterable[date] | None 
             _fail(f"{bar.symbol}: bar carries a timestamp, not a session date: {bar.date!r}")
         if bar.date.weekday() >= 5:
             _fail(f"{bar.symbol}: {bar.date} is a weekend, not a session")
-    if calendar is not None:
-        sessions = set(calendar)
-        for bar in bars:
-            if bar.date not in sessions:
-                _fail(f"{bar.symbol}: {bar.date} is outside the trading calendar")
+    if calendar is None:
+        # No calendar available at all (synthetic data, first ingest). Skipping
+        # is honest; there is nothing to check against.
+        return
+    sessions = set(calendar)
+    if not sessions:
+        # An empty calendar is "we know nothing", not "no sessions existed".
+        # Checking against it would reject every bar with a misleading message,
+        # and skipping it would silently drop a §12.4 check. Say what is wrong.
+        _fail(
+            "empty trading calendar: the benchmark series is not cached, so "
+            "sessions cannot be verified — ingest the benchmark first"
+        )
+    for bar in bars:
+        if bar.date not in sessions:
+            _fail(f"{bar.symbol}: {bar.date} is outside the trading calendar")
 
 
 def check_ordering_and_duplicates(bars: Sequence[Bar]) -> None:

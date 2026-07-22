@@ -46,18 +46,47 @@ def test_universe_fails_closed_when_snapshot_is_stale(tmp_path: Path) -> None:
         provider.get_universe(date(2030, 1, 1))
 
 
-def test_cached_range_is_served_without_fetching(tmp_path: Path) -> None:
-    """A covered request must not reach the network at all."""
+def _never_fetch(*args, **kwargs):  # pragma: no cover - must never run
+    raise AssertionError("fetch attempted for a range already recorded as covered")
+
+
+def test_recorded_coverage_is_served_without_fetching(tmp_path: Path) -> None:
+    """A request inside a previously *requested* window must not hit the network."""
     provider = build(tmp_path)
     bars = list(breakout_success().bars)
-    cache.write_bars(tmp_path / "cache", "NVDA", bars)
-
-    def explode(*args, **kwargs):  # pragma: no cover - must never run
-        raise AssertionError("fetch attempted for a fully cached range")
-
-    provider.fetch = explode  # type: ignore[method-assign]
+    cache.write_bars(
+        tmp_path / "cache", "NVDA", bars, requested=(bars[0].date, bars[-1].date)
+    )
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
     served = provider.get_daily_bars("NVDA", bars[10].date, bars[20].date)
     assert [b.date for b in served] == [b.date for b in bars[10:21]]
+
+
+def test_bars_present_without_recorded_coverage_still_refetch(tmp_path: Path) -> None:
+    """Bars alone do not prove a range is complete.
+
+    The old check compared the first and last cached dates against the request
+    with four days of slack, so a truncated tail could pass as covered. Presence
+    is now not enough — only a recorded request window counts.
+    """
+    provider = build(tmp_path)
+    bars = list(breakout_success().bars)
+    cache.write_bars(tmp_path / "cache", "NVDA", bars)  # no `requested=`
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
+    with pytest.raises(AssertionError, match="fetch attempted"):
+        provider.get_daily_bars("NVDA", bars[10].date, bars[20].date)
+
+
+def test_request_beyond_recorded_coverage_refetches(tmp_path: Path) -> None:
+    """Asking past the recorded tail must not be served from a stale cache."""
+    provider = build(tmp_path)
+    bars = list(breakout_success().bars)
+    cache.write_bars(
+        tmp_path / "cache", "NVDA", bars[:200], requested=(bars[0].date, bars[199].date)
+    )
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
+    with pytest.raises(AssertionError, match="fetch attempted"):
+        provider.get_daily_bars("NVDA", bars[0].date, bars[-1].date)
 
 
 def test_calendar_derives_from_cached_benchmark(tmp_path: Path) -> None:

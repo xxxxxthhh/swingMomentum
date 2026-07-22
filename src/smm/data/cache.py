@@ -37,8 +37,26 @@ _SCHEMA = pa.schema(
 )
 
 
+_COVERAGE_START = b"smm_requested_start"
+_COVERAGE_END = b"smm_requested_end"
+
+
 def cache_path(root: Path | str, symbol: str) -> Path:
     return Path(root) / f"{symbol.upper()}.parquet"
+
+
+def _read_coverage(target: Path) -> tuple[date, date] | None:
+    """Read the recorded window from the file's own schema metadata.
+
+    Read via ``pq.read_schema``: passing an explicit ``schema=`` to
+    ``read_table`` substitutes that schema and drops the file's metadata with
+    it, which silently loses the coverage record.
+    """
+    meta = pq.read_schema(target).metadata or {}
+    start, end = meta.get(_COVERAGE_START), meta.get(_COVERAGE_END)
+    if not start or not end:
+        return None
+    return date.fromisoformat(start.decode()), date.fromisoformat(end.decode())
 
 
 def _to_table(bars: Sequence[Bar]) -> pa.Table:
@@ -63,11 +81,22 @@ def _to_bars(table: pa.Table) -> list[Bar]:
     return [Bar(**row) for row in rows]
 
 
-def write_bars(root: Path | str, symbol: str, bars: Sequence[Bar]) -> Path:
+def write_bars(
+    root: Path | str,
+    symbol: str,
+    bars: Sequence[Bar],
+    *,
+    requested: tuple[date, date] | None = None,
+) -> Path:
     """Merge ``bars`` into the symbol's cache file, newest write winning per session.
 
     Merging rather than appending is what makes a re-run idempotent: the same
     session arriving twice must not become two rows.
+
+    ``requested`` is the window that was asked for, recorded in file metadata
+    and widened across writes. It answers "is this range complete?" exactly,
+    which the bar dates alone cannot: a series that legitimately has no bar on
+    the last requested day is indistinguishable from one that was truncated.
     """
     if not bars:
         raise DataValidationError(f"refusing to cache an empty series for {symbol}")
@@ -79,14 +108,28 @@ def write_bars(root: Path | str, symbol: str, bars: Sequence[Bar]) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
 
     merged: dict[date, Bar] = {}
+    coverage = requested
     if target.exists():
         for existing in _to_bars(pq.read_table(target, schema=_SCHEMA)):
             merged[existing.date] = existing
+        previous = _read_coverage(target)
+        if previous and coverage:
+            coverage = (min(previous[0], coverage[0]), max(previous[1], coverage[1]))
+        elif previous:
+            coverage = previous
     for bar in bars:
         merged[bar.date] = bar
 
     ordered = [merged[d] for d in sorted(merged)]
-    pq.write_table(_to_table(ordered), target, compression="snappy")
+    table = _to_table(ordered)
+    if coverage:
+        table = table.replace_schema_metadata(
+            {
+                _COVERAGE_START: coverage[0].isoformat().encode(),
+                _COVERAGE_END: coverage[1].isoformat().encode(),
+            }
+        )
+    pq.write_table(table, target, compression="snappy")
     return target
 
 
@@ -114,3 +157,22 @@ def cached_range(root: Path | str, symbol: str) -> tuple[date, date] | None:
     if not bars:
         return None
     return bars[0].date, bars[-1].date
+
+
+def covered_range(root: Path | str, symbol: str) -> tuple[date, date] | None:
+    """The window this symbol was actually *asked* for, or ``None`` if unrecorded.
+
+    Distinct from :func:`cached_range`, which reports the bars present. A gap at
+    either edge is invisible to the latter — the provider simply may not have
+    had a session there.
+    """
+    target = cache_path(root, symbol)
+    if not target.exists():
+        return None
+    return _read_coverage(target)
+
+
+def covers(root: Path | str, symbol: str, start: date, end: date) -> bool:
+    """Whether ``[start, end]`` lies inside a previously requested window."""
+    coverage = covered_range(root, symbol)
+    return coverage is not None and coverage[0] <= start and coverage[1] >= end

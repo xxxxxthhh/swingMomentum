@@ -74,6 +74,44 @@ def test_cached_range(tmp_path: Path) -> None:
     assert cache.cached_range(tmp_path, "NVDA") == (BARS[0].date, BARS[-1].date)
 
 
+def test_coverage_is_recorded_and_queryable(tmp_path: Path) -> None:
+    window = (BARS[0].date, BARS[-1].date)
+    cache.write_bars(tmp_path, "NVDA", BARS, requested=window)
+    assert cache.covered_range(tmp_path, "NVDA") == window
+    assert cache.covers(tmp_path, "NVDA", BARS[5].date, BARS[9].date)
+
+
+def test_coverage_absent_when_never_requested(tmp_path: Path) -> None:
+    cache.write_bars(tmp_path, "NVDA", BARS)
+    assert cache.covered_range(tmp_path, "NVDA") is None
+    assert not cache.covers(tmp_path, "NVDA", BARS[5].date, BARS[9].date)
+
+
+def test_coverage_widens_across_writes(tmp_path: Path) -> None:
+    """Two adjacent fetches must leave one window spanning both."""
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[:100], requested=(BARS[0].date, BARS[99].date)
+    )
+    cache.write_bars(
+        tmp_path, "NVDA", BARS[100:], requested=(BARS[100].date, BARS[-1].date)
+    )
+    assert cache.covered_range(tmp_path, "NVDA") == (BARS[0].date, BARS[-1].date)
+    assert cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[-1].date)
+
+
+def test_coverage_survives_a_write_without_a_window(tmp_path: Path) -> None:
+    """A later metadata-less write must not erase what was already proven."""
+    cache.write_bars(tmp_path, "NVDA", BARS, requested=(BARS[0].date, BARS[-1].date))
+    cache.write_bars(tmp_path, "NVDA", [BARS[10]])
+    assert cache.covered_range(tmp_path, "NVDA") == (BARS[0].date, BARS[-1].date)
+
+
+def test_partial_coverage_is_not_claimed(tmp_path: Path) -> None:
+    cache.write_bars(tmp_path, "NVDA", BARS, requested=(BARS[10].date, BARS[20].date))
+    assert not cache.covers(tmp_path, "NVDA", BARS[0].date, BARS[20].date)
+    assert not cache.covers(tmp_path, "NVDA", BARS[10].date, BARS[-1].date)
+
+
 def test_refuses_empty_series(tmp_path: Path) -> None:
     with pytest.raises(DataValidationError, match="empty series"):
         cache.write_bars(tmp_path, "NVDA", [])

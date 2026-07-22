@@ -63,11 +63,13 @@ class YFinanceProvider:
         universe_dir: Path | str,
         validation: ValidationSection,
         max_snapshot_age_days: int,
+        benchmark: str = "SPY",
     ) -> None:
         self._cache_dir = Path(cache_dir)
         self._universe_dir = Path(universe_dir)
         self._validation = validation
         self._max_snapshot_age_days = max_snapshot_age_days
+        self._benchmark = benchmark.upper()
 
     # -- DataProvider ----------------------------------------------------
 
@@ -78,39 +80,28 @@ class YFinanceProvider:
         return list(snapshot.symbols)
 
     def get_daily_bars(self, symbol: str, start: date, end: date) -> Sequence[Bar]:
-        cached = cache.read_bars(self._cache_dir, symbol, start, end)
-        if self._covers(cached, start, end):
-            return cached
+        if cache.covers(self._cache_dir, symbol, start, end):
+            return cache.read_bars(self._cache_dir, symbol, start, end)
         fetched = self.fetch(symbol, start, end)
-        cache.write_bars(self._cache_dir, symbol, fetched)
+        cache.write_bars(self._cache_dir, symbol, fetched, requested=(start, end))
         return cache.read_bars(self._cache_dir, symbol, start, end)
 
     def get_calendar(self, start: date, end: date) -> list[date]:
         """Sessions observed in the cached benchmark series.
 
         Deliberately derived from data already fetched rather than from an
-        exchange-calendar dependency: M1 needs a calendar to validate against,
+        exchange-calendar dependency: this needs a calendar to validate against,
         not a holiday authority.
+
+        Returns an empty list when the benchmark is not cached. That is a
+        *known-nothing* state, not "no sessions existed" — callers must treat it
+        as such, which :func:`~smm.data.validation.check_session_dates` does by
+        failing closed rather than silently passing every bar.
         """
-        bars = cache.read_bars(self._cache_dir, "SPY", start, end)
+        bars = cache.read_bars(self._cache_dir, self._benchmark, start, end)
         return [b.date for b in bars]
 
     # -- internals -------------------------------------------------------
-
-    @staticmethod
-    def _covers(bars: Sequence[Bar], start: date, end: date) -> bool:
-        """Whether the cache plausibly spans the request.
-
-        Weekday-based rather than calendar-based: without a holiday calendar the
-        only honest statement is that the edges are close enough not to be a
-        hole. Anything looser would let a partially-cached range pass as
-        complete.
-        """
-        if not bars:
-            return False
-        return bars[0].date <= start + timedelta(days=4) and bars[-1].date >= end - timedelta(
-            days=4
-        )
 
     def fetch(self, symbol: str, start: date, end: date) -> list[Bar]:
         """Download, normalise and validate. Raises rather than returning partial data."""

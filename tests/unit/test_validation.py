@@ -103,6 +103,21 @@ def test_weekend_session_rejected() -> None:
         check_session_dates([bar(date(2024, 6, 8))])
 
 
+def test_empty_calendar_fails_closed() -> None:
+    """An empty calendar means "we know nothing", not "no sessions existed".
+
+    Checking bars against it would reject every one with a misleading message;
+    skipping it would silently drop a §12.4 check. It says what is wrong.
+    """
+    with pytest.raises(DataValidationError, match="benchmark series is not cached"):
+        check_session_dates([bar(date(2024, 6, 6))], calendar=[])
+
+
+def test_absent_calendar_is_skipped_not_failed() -> None:
+    """None is a legitimate state — synthetic data has no exchange calendar."""
+    check_session_dates([bar(date(2024, 6, 6))], calendar=None)
+
+
 def test_date_outside_calendar_rejected() -> None:
     bars = [bar(date(2024, 6, 6)), bar(date(2024, 6, 7))]
     with pytest.raises(DataValidationError, match="outside the trading calendar"):

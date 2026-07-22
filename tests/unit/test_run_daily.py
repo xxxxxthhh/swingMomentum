@@ -262,6 +262,12 @@ def test_sanitize_path_segment_rejects_path_traversal() -> None:
         sanitize_path_segment("a/b", label="config_hash")
 
 
+@pytest.mark.parametrize("value", [".", ".."])
+def test_sanitize_path_segment_rejects_bare_dot_segments(value: str) -> None:
+    with pytest.raises(DataValidationError, match="strategy_version"):
+        sanitize_path_segment(value, label="strategy_version")
+
+
 def test_sanitize_path_segment_accepts_the_real_config_identity() -> None:
     loaded = load_config()
     assert sanitize_path_segment(loaded.version, label="strategy_version") == loaded.version

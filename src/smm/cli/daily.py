@@ -54,7 +54,7 @@ def sanitize_path_segment(value: str, *, label: str) -> str:
     in either would escape the intended root rather than just fail to make
     a valid directory name.
     """
-    if not value or not _SAFE_SEGMENT.match(value):
+    if value in {".", ".."} or not value or not _SAFE_SEGMENT.match(value):
         raise DataValidationError(
             f"{label} is not a safe artifact-root path segment: {value!r}"
         )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from datetime import date, timedelta
 from pathlib import Path
@@ -24,6 +26,9 @@ from smm.domain.enums import SignalState
 from smm.report.rows import BUCKET_WATCHLIST
 from smm.signals.lifecycle import active_transitions_by_symbol
 from smm.signals.store import read_transitions
+
+REPO = Path(__file__).resolve().parents[2]
+M6_CONFIG = REPO / "configs" / "smm_v1_1_0.yaml"
 
 
 def _synthetic_setup(cache_dir: Path):
@@ -68,6 +73,51 @@ def test_run_daily_writes_a_complete_bundle_and_manifest(tmp_path: Path) -> None
     assert manifest["execution_mode"] == "mvp_a_signal"
     assert manifest["as_of"] == session.isoformat()
     assert set(manifest["artifacts"]) == {"report_csv", "report_markdown", "features_snapshot"}
+
+
+def test_v1_1_execution_only_config_preserves_signal_rows(tmp_path: Path) -> None:
+    """Reviewed M6 config changes must not alter MVP-A signal shape."""
+    v1_0, provider, symbols, sectors, session = _synthetic_setup(tmp_path / "cache")
+    v1_1 = load_config(M6_CONFIG)
+
+    def write_report(loaded, label: str) -> bytes:
+        root = artifact_root(
+            tmp_path / label,
+            strategy_version=loaded.version,
+            config_hash=loaded.config_hash,
+        )
+        run_daily(
+            provider,
+            session=session,
+            symbols=symbols,
+            sectors=sectors,
+            loaded=loaded,
+            root=root,
+            provider_source="synthetic",
+        )
+        return (root / session.isoformat() / "report.csv").read_bytes()
+
+    def normalized_signal_rows(report: bytes) -> bytes:
+        reader = csv.DictReader(report.decode("utf-8").splitlines())
+        identity_fields = {"strategy_version", "config_hash"}
+        fieldnames = [name for name in reader.fieldnames or [] if name not in identity_fields]
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in reader:
+            normalized = {name: row[name] for name in fieldnames}
+            # Strategy version is deliberately part of signal_id; preserve the
+            # stable symbol/setup component while comparing signal shape.
+            normalized["signal_id"] = normalized["signal_id"].split(":", maxsplit=1)[1]
+            writer.writerow(normalized)
+        return output.getvalue().encode("utf-8")
+
+    # Provenance identity is deliberately different; every signal field and the
+    # stable signal-id component must remain byte-identical after its version prefix
+    # and the two required provenance columns are removed.
+    assert normalized_signal_rows(write_report(v1_0, "v1_0")) == normalized_signal_rows(
+        write_report(v1_1, "v1_1")
+    )
 
 
 def test_run_daily_exact_rerun_is_a_noop(tmp_path: Path) -> None:

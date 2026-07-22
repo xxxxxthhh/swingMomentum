@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -184,6 +185,11 @@ class RiskSection(BaseModel):
     risk_on_max_exposure: float = Field(ge=0, le=1)
     neutral_max_exposure: float = Field(ge=0, le=1)
     risk_off_max_exposure: float = Field(ge=0, le=1)
+    daily_loss_pause_r: Decimal | None = Field(default=None, gt=Decimal("0"))
+    drawdown_reduce_at: Decimal | None = Field(
+        default=None, gt=Decimal("0"), lt=Decimal("1")
+    )
+    drawdown_stop_at: Decimal | None = Field(default=None, gt=Decimal("0"), lt=Decimal("1"))
 
     @field_validator("risk_off_per_trade")
     @classmethod
@@ -191,6 +197,17 @@ class RiskSection(BaseModel):
         if value != 0:
             raise ValueError("risk_off_per_trade must remain 0 in SMM-V1.0.0")
         return value
+
+    @model_validator(mode="after")
+    def drawdown_reduce_precedes_stop(self) -> RiskSection:
+        if (
+            self.drawdown_reduce_at is not None
+            and self.drawdown_stop_at is not None
+            and self.drawdown_reduce_at >= self.drawdown_stop_at
+        ):
+            msg = "drawdown_reduce_at must be < drawdown_stop_at"
+            raise ValueError(msg)
+        return self
 
 
 class ExitSection(BaseModel):
@@ -208,6 +225,10 @@ class ExecutionSection(BaseModel):
 
     next_day_open: bool = True
     max_open_gap_atr: float = Field(gt=0)
+    half_spread_bps: Decimal | None = Field(default=None, gt=Decimal("0"))
+    entry_slippage_bps: Decimal | None = Field(default=None, gt=Decimal("0"))
+    exit_slippage_bps: Decimal | None = Field(default=None, gt=Decimal("0"))
+    commission_per_share: Decimal | None = Field(default=None, ge=Decimal("0"))
 
 
 class ValidationSection(BaseModel):
@@ -301,3 +322,25 @@ class StrategyConfig(BaseModel):
     risk: RiskSection
     exit: ExitSection
     execution: ExecutionSection
+
+    @model_validator(mode="after")
+    def post_v1_0_requires_m6_execution_contract(self) -> StrategyConfig:
+        # V1.0.0 predates this frozen execution contract. Every successor
+        # identity must carry it explicitly; none may fall back to defaults.
+        if self.strategy.version == "SMM-V1.0.0":
+            return self
+
+        required = {
+            "execution.half_spread_bps": self.execution.half_spread_bps,
+            "execution.entry_slippage_bps": self.execution.entry_slippage_bps,
+            "execution.exit_slippage_bps": self.execution.exit_slippage_bps,
+            "execution.commission_per_share": self.execution.commission_per_share,
+            "risk.daily_loss_pause_r": self.risk.daily_loss_pause_r,
+            "risk.drawdown_reduce_at": self.risk.drawdown_reduce_at,
+            "risk.drawdown_stop_at": self.risk.drawdown_stop_at,
+        }
+        missing = [key for key, value in required.items() if value is None]
+        if missing:
+            msg = f"SMM-V1.1.0 requires M6 config keys: {', '.join(missing)}"
+            raise ValueError(msg)
+        return self

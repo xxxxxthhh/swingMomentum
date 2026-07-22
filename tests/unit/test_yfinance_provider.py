@@ -5,8 +5,10 @@ Everything here except the ``network`` block runs offline.
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -125,6 +127,120 @@ def test_aware_index_is_converted_to_the_eastern_session() -> None:
 
 def test_plain_date_index_passes_through() -> None:
     assert YFinanceProvider._session_date(date(2024, 1, 2)) == date(2024, 1, 2)
+
+
+# --- split-action history ------------------------------------------------
+
+
+class _ActionColumns(list[str]):
+    """List-shaped columns with the yfinance ``nlevels`` attribute."""
+
+    nlevels = 1
+
+
+class _ActionFrame:
+    """Small offline stand-in for the portion of a yfinance frame we consume."""
+
+    def __init__(self, rows: list[tuple[date, dict[str, object]]]) -> None:
+        self._rows = rows
+        self.empty = not rows
+        self.columns = _ActionColumns({key for _, row in rows for key in row})
+
+    def iterrows(self):
+        return iter(self._rows)
+
+
+def _install_yfinance(monkeypatch: pytest.MonkeyPatch, frame: _ActionFrame) -> list[dict]:
+    calls: list[dict] = []
+
+    def download(symbol: str, **kwargs) -> _ActionFrame:
+        calls.append({"symbol": symbol, **kwargs})
+        return frame
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=download))
+    return calls
+
+
+def test_fetch_split_action_history_normalises_yahoo_actions_and_checks_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_yfinance(
+        monkeypatch,
+        _ActionFrame(
+            [
+                (date(2024, 6, 7), {"Stock Splits": 0.0}),
+                (date(2024, 6, 10), {"Stock Splits": 10.0}),
+            ]
+        ),
+    )
+
+    history = build(tmp_path).fetch_split_action_history(
+        "nvda",
+        date(2024, 6, 7),
+        date(2024, 6, 10),
+        observation_cutoff=date(2024, 6, 10),
+        expected_sessions=(date(2024, 6, 7), date(2024, 6, 10)),
+    )
+
+    assert history.symbol == "NVDA"
+    assert history.coverage_start == date(2024, 6, 7)
+    assert history.coverage_end == date(2024, 6, 10)
+    actual_actions = [
+        (action.action_id, action.action_date, str(action.split_ratio))
+        for action in history.actions
+    ]
+    assert actual_actions == [
+        ("yahoo:NVDA:2024-06-10:stock-split", date(2024, 6, 10), "10.0")
+    ]
+    assert calls == [
+        {
+            "symbol": "nvda",
+            "start": "2024-06-07",
+            "end": "2024-06-11",
+            "auto_adjust": False,
+            "actions": True,
+            "progress": False,
+            "threads": False,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("frame", "match"),
+    [
+        (_ActionFrame([(date(2024, 6, 7), {"Close": 120.0})]), "Stock Splits"),
+        (
+            _ActionFrame([(date(2024, 6, 7), {"Stock Splits": 0.0})]),
+            "missing expected sessions",
+        ),
+        (_ActionFrame([(date(2024, 6, 7), {"Stock Splits": -2.0})]), "positive"),
+        (
+            _ActionFrame(
+                [
+                    (date(2024, 6, 7), {"Stock Splits": 0.0}),
+                    (date(2024, 6, 7), {"Stock Splits": 0.0}),
+                ]
+            ),
+            "duplicate provider session",
+        ),
+    ],
+)
+def test_fetch_split_action_history_fails_closed_for_unverifiable_action_frames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    frame: _ActionFrame,
+    match: str,
+) -> None:
+    _install_yfinance(monkeypatch, frame)
+
+    with pytest.raises(DataValidationError, match=match):
+        build(tmp_path).fetch_split_action_history(
+            "NVDA",
+            date(2024, 6, 7),
+            date(2024, 6, 10),
+            observation_cutoff=date(2024, 6, 10),
+            expected_sessions=(date(2024, 6, 7), date(2024, 6, 10)),
+        )
 
 
 # --- network: the ADR §3.4 verification ----------------------------------

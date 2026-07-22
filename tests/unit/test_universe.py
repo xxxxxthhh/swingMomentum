@@ -39,13 +39,106 @@ def universe_dir(tmp_path: Path) -> Path:
     return directory
 
 
-# --- shipped seed ----------------------------------------------------------
+# --- shipped production snapshot -------------------------------------------
 
 
-def test_shipped_seed_snapshot_parses() -> None:
+GICS_SECTORS = {
+    "information_technology",
+    "financials",
+    "health_care",
+    "consumer_discretionary",
+    "consumer_staples",
+    "energy",
+    "industrials",
+    "materials",
+    "utilities",
+    "real_estate",
+    "communication_services",
+}
+
+# Benchmarks, not universe members: constitution §10 limits the universe to
+# common stock, and these are ETFs.
+BENCHMARK_ETFS = {
+    "SPY",
+    "QQQ",
+    # The 11 GICS sector proxies from the M2 ADR's sector_benchmarks.
+    "XLK",
+    "XLF",
+    "XLV",
+    "XLY",
+    "XLP",
+    "XLE",
+    "XLI",
+    "XLB",
+    "XLU",
+    "XLRE",
+    "XLC",
+}
+
+
+def shipped_rows() -> list[dict[str, str]]:
+    path = next(SHIPPED.glob("*.csv"))
+    with path.open(newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def test_shipped_snapshot_parses() -> None:
     snapshots = load_snapshots(SHIPPED)
-    assert snapshots
-    assert "SPY" in snapshots[-1].symbols
+    assert len(snapshots) == 1, "two snapshots on one date would make selection order-dependent"
+    assert len(snapshots[0].symbols) > 400
+
+
+def test_shipped_snapshot_reconciles_with_both_indices() -> None:
+    """415 + 88 = 503 S&P 500, and 88 + 15 = 103 Nasdaq-100."""
+    rows = shipped_rows()
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["index_membership"]] = counts.get(row["index_membership"], 0) + 1
+    sp500 = counts.get("sp500", 0) + counts.get("both", 0)
+    ndx = counts.get("ndx100", 0) + counts.get("both", 0)
+    assert 480 <= sp500 <= 520, f"S&P 500 count off: {sp500}"
+    assert 95 <= ndx <= 110, f"Nasdaq-100 count off: {ndx}"
+
+
+def test_shipped_snapshot_contains_no_etfs() -> None:
+    """An ETF in the universe would become a scan candidate (§10 forbids it)."""
+    symbols = {r["symbol"] for r in shipped_rows()}
+    assert not (symbols & BENCHMARK_ETFS)
+
+
+def test_shipped_snapshot_sectors_are_gics_keys_or_empty() -> None:
+    """Empty is allowed and meaningful: a missing sector propagates and drops
+    the symbol, whereas a wrong one silently corrupts the whole sector's RS
+    ranking. Nasdaq-only names have no GICS source, so they are left empty."""
+    for row in shipped_rows():
+        assert row["sector"] in GICS_SECTORS or row["sector"] == "", (
+            f"{row['symbol']}: bad sector {row['sector']!r}"
+        )
+
+
+def test_sp500_members_all_have_a_gics_sector() -> None:
+    """The S&P 500 page carries GICS directly — none of those may be empty."""
+    for row in shipped_rows():
+        if row["index_membership"] in ("sp500", "both"):
+            assert row["sector"] in GICS_SECTORS, f"{row['symbol']} lost its GICS sector"
+
+
+def test_nasdaq_only_members_have_no_guessed_sector() -> None:
+    """The Nasdaq-100 page carries ICB, which does not convert safely to GICS.
+
+    Mapping it anyway was measured at a 27% error rate (NBIS, PDD, SPCX, TRI
+    out of 15), so these are deliberately left empty rather than guessed.
+    """
+    for row in shipped_rows():
+        if row["index_membership"] == "ndx100":
+            assert row["sector"] == "", f"{row['symbol']}: sector must not be guessed from ICB"
+
+
+def test_shipped_snapshot_uses_yahoo_share_class_form() -> None:
+    """Wikipedia writes BRK.B; Yahoo needs BRK-B. A dot would silently 404."""
+    symbols = {r["symbol"] for r in shipped_rows()}
+    assert not any("." in s for s in symbols)
+    assert "BRK-B" in symbols
 
 
 # --- allowed ---------------------------------------------------------------

@@ -1,0 +1,519 @@
+symbol,name,index_membership,sector,snapshot_date
+A,Agilent Technologies,sp500,health_care,2026-07-22
+AAPL,Apple Inc.,both,information_technology,2026-07-22
+ABBV,AbbVie,sp500,health_care,2026-07-22
+ABNB,Airbnb,both,consumer_discretionary,2026-07-22
+ABT,Abbott Laboratories,sp500,health_care,2026-07-22
+ACGL,Arch Capital Group,sp500,financials,2026-07-22
+ACN,Accenture,sp500,information_technology,2026-07-22
+ADBE,Adobe Inc.,both,information_technology,2026-07-22
+ADI,Analog Devices,both,information_technology,2026-07-22
+ADM,Archer Daniels Midland,sp500,consumer_staples,2026-07-22
+ADP,Automatic Data Processing,both,industrials,2026-07-22
+ADSK,Autodesk,both,information_technology,2026-07-22
+AEE,Ameren,sp500,utilities,2026-07-22
+AEP,American Electric Power,both,utilities,2026-07-22
+AES,AES Corporation,sp500,utilities,2026-07-22
+AFL,Aflac,sp500,financials,2026-07-22
+AIG,American International Group,sp500,financials,2026-07-22
+AIZ,Assurant,sp500,financials,2026-07-22
+AJG,Arthur J. Gallagher & Co.,sp500,financials,2026-07-22
+AKAM,Akamai Technologies,sp500,information_technology,2026-07-22
+ALAB,Astera Labs,ndx100,,2026-07-22
+ALB,Albemarle Corporation,sp500,materials,2026-07-22
+ALGN,Align Technology,sp500,health_care,2026-07-22
+ALL,Allstate,sp500,financials,2026-07-22
+ALLE,Allegion,sp500,industrials,2026-07-22
+ALNY,Alnylam Pharmaceuticals,ndx100,,2026-07-22
+AMAT,Applied Materials,both,information_technology,2026-07-22
+AMCR,Amcor,sp500,materials,2026-07-22
+AMD,Advanced Micro Devices,both,information_technology,2026-07-22
+AME,Ametek,sp500,industrials,2026-07-22
+AMGN,Amgen,both,health_care,2026-07-22
+AMP,Ameriprise Financial,sp500,financials,2026-07-22
+AMT,American Tower,sp500,real_estate,2026-07-22
+AMZN,Amazon,both,consumer_discretionary,2026-07-22
+ANET,Arista Networks,sp500,information_technology,2026-07-22
+AON,Aon plc,sp500,financials,2026-07-22
+AOS,A. O. Smith,sp500,industrials,2026-07-22
+APA,APA Corporation,sp500,energy,2026-07-22
+APD,Air Products,sp500,materials,2026-07-22
+APH,Amphenol,sp500,information_technology,2026-07-22
+APO,Apollo Global Management,sp500,financials,2026-07-22
+APP,AppLovin,both,information_technology,2026-07-22
+APTV,Aptiv,sp500,consumer_discretionary,2026-07-22
+ARE,Alexandria Real Estate Equities,sp500,real_estate,2026-07-22
+ARES,Ares Management,sp500,financials,2026-07-22
+ARM,Arm Holdings,ndx100,,2026-07-22
+ASML,ASML Holding,ndx100,,2026-07-22
+ATO,Atmos Energy,sp500,utilities,2026-07-22
+AVB,AvalonBay Communities,sp500,real_estate,2026-07-22
+AVGO,Broadcom,both,information_technology,2026-07-22
+AVY,Avery Dennison,sp500,materials,2026-07-22
+AWK,American Water Works,sp500,utilities,2026-07-22
+AXON,Axon Enterprise,both,industrials,2026-07-22
+AXP,American Express,sp500,financials,2026-07-22
+AZO,AutoZone,sp500,consumer_discretionary,2026-07-22
+BA,Boeing,sp500,industrials,2026-07-22
+BAC,Bank of America,sp500,financials,2026-07-22
+BALL,Ball Corporation,sp500,materials,2026-07-22
+BAX,Baxter International,sp500,health_care,2026-07-22
+BBY,Best Buy,sp500,consumer_discretionary,2026-07-22
+BDX,Becton Dickinson,sp500,health_care,2026-07-22
+BEN,Franklin Resources,sp500,financials,2026-07-22
+BF-B,Brown–Forman,sp500,consumer_staples,2026-07-22
+BG,Bunge Global,sp500,consumer_staples,2026-07-22
+BIIB,Biogen,sp500,health_care,2026-07-22
+BKNG,Booking Holdings,both,consumer_discretionary,2026-07-22
+BKR,Baker Hughes,both,energy,2026-07-22
+BLDR,Builders FirstSource,sp500,industrials,2026-07-22
+BLK,BlackRock,sp500,financials,2026-07-22
+BMY,Bristol Myers Squibb,sp500,health_care,2026-07-22
+BNY,BNY Mellon,sp500,financials,2026-07-22
+BR,Broadridge Financial Solutions,sp500,industrials,2026-07-22
+BRK-B,Berkshire Hathaway,sp500,financials,2026-07-22
+BRO,Brown & Brown,sp500,financials,2026-07-22
+BSX,Boston Scientific,sp500,health_care,2026-07-22
+BX,Blackstone Inc.,sp500,financials,2026-07-22
+BXP,"BXP, Inc.",sp500,real_estate,2026-07-22
+C,Citigroup,sp500,financials,2026-07-22
+CAH,Cardinal Health,sp500,health_care,2026-07-22
+CARR,Carrier Global,sp500,industrials,2026-07-22
+CASY,Casey's,sp500,consumer_staples,2026-07-22
+CAT,Caterpillar Inc.,sp500,industrials,2026-07-22
+CB,Chubb Limited,sp500,financials,2026-07-22
+CBOE,Cboe Global Markets,sp500,financials,2026-07-22
+CBRE,CBRE Group,sp500,real_estate,2026-07-22
+CCEP,Coca-Cola Europacific Partners,ndx100,,2026-07-22
+CCI,Crown Castle,sp500,real_estate,2026-07-22
+CCL,Carnival Corporation,sp500,consumer_discretionary,2026-07-22
+CDNS,Cadence Design Systems,both,information_technology,2026-07-22
+CDW,CDW Corporation,sp500,information_technology,2026-07-22
+CEG,Constellation Energy,both,utilities,2026-07-22
+CF,CF Industries,sp500,materials,2026-07-22
+CFG,Citizens Financial Group,sp500,financials,2026-07-22
+CHD,Church & Dwight,sp500,consumer_staples,2026-07-22
+CHRW,C.H. Robinson,sp500,industrials,2026-07-22
+CHTR,Charter Communications,sp500,communication_services,2026-07-22
+CI,Cigna,sp500,health_care,2026-07-22
+CIEN,Ciena,sp500,information_technology,2026-07-22
+CINF,Cincinnati Financial,sp500,financials,2026-07-22
+CL,Colgate-Palmolive,sp500,consumer_staples,2026-07-22
+CLX,Clorox,sp500,consumer_staples,2026-07-22
+CMCSA,Comcast,both,communication_services,2026-07-22
+CME,CME Group,sp500,financials,2026-07-22
+CMG,Chipotle Mexican Grill,sp500,consumer_discretionary,2026-07-22
+CMI,Cummins,sp500,industrials,2026-07-22
+CMS,CMS Energy,sp500,utilities,2026-07-22
+CNC,Centene Corporation,sp500,health_care,2026-07-22
+CNP,CenterPoint Energy,sp500,utilities,2026-07-22
+COF,Capital One,sp500,financials,2026-07-22
+COHR,Coherent Corp.,sp500,information_technology,2026-07-22
+COIN,Coinbase,sp500,financials,2026-07-22
+COO,Cooper Companies (The),sp500,health_care,2026-07-22
+COP,ConocoPhillips,sp500,energy,2026-07-22
+COR,Cencora,sp500,health_care,2026-07-22
+COST,Costco,both,consumer_staples,2026-07-22
+CPAY,Corpay,sp500,financials,2026-07-22
+CPRT,Copart,both,industrials,2026-07-22
+CPT,Camden Property Trust,sp500,real_estate,2026-07-22
+CRH,CRH plc,sp500,materials,2026-07-22
+CRL,Charles River Laboratories,sp500,health_care,2026-07-22
+CRM,Salesforce,sp500,information_technology,2026-07-22
+CRWD,CrowdStrike,both,information_technology,2026-07-22
+CRWV,CoreWeave,ndx100,,2026-07-22
+CSCO,Cisco,both,information_technology,2026-07-22
+CSGP,CoStar Group,sp500,real_estate,2026-07-22
+CSX,CSX Corporation,both,industrials,2026-07-22
+CTAS,Cintas,both,industrials,2026-07-22
+CTSH,Cognizant,sp500,information_technology,2026-07-22
+CTVA,Corteva,sp500,materials,2026-07-22
+CVNA,Carvana,sp500,consumer_discretionary,2026-07-22
+CVS,CVS Health,sp500,health_care,2026-07-22
+CVX,Chevron Corporation,sp500,energy,2026-07-22
+D,Dominion Energy,sp500,utilities,2026-07-22
+DAL,Delta Air Lines,sp500,industrials,2026-07-22
+DASH,DoorDash,both,consumer_discretionary,2026-07-22
+DD,DuPont,sp500,materials,2026-07-22
+DDOG,Datadog,both,information_technology,2026-07-22
+DE,Deere & Company,sp500,industrials,2026-07-22
+DECK,Deckers Brands,sp500,consumer_discretionary,2026-07-22
+DELL,Dell Technologies,sp500,information_technology,2026-07-22
+DG,Dollar General,sp500,consumer_staples,2026-07-22
+DGX,Quest Diagnostics,sp500,health_care,2026-07-22
+DHI,D. R. Horton,sp500,consumer_discretionary,2026-07-22
+DHR,Danaher Corporation,sp500,health_care,2026-07-22
+DIS,Walt Disney Company (The),sp500,communication_services,2026-07-22
+DLR,Digital Realty,sp500,real_estate,2026-07-22
+DLTR,Dollar Tree,sp500,consumer_staples,2026-07-22
+DOC,Healthpeak Properties,sp500,real_estate,2026-07-22
+DOV,Dover Corporation,sp500,industrials,2026-07-22
+DOW,Dow Inc.,sp500,materials,2026-07-22
+DPZ,Domino's,sp500,consumer_discretionary,2026-07-22
+DRI,Darden Restaurants,sp500,consumer_discretionary,2026-07-22
+DTE,DTE Energy,sp500,utilities,2026-07-22
+DUK,Duke Energy,sp500,utilities,2026-07-22
+DVA,DaVita,sp500,health_care,2026-07-22
+DVN,Devon Energy,sp500,energy,2026-07-22
+DXCM,Dexcom,both,health_care,2026-07-22
+EA,Electronic Arts,both,communication_services,2026-07-22
+EBAY,eBay Inc.,sp500,consumer_discretionary,2026-07-22
+ECHO,EchoStar,sp500,communication_services,2026-07-22
+ECL,Ecolab,sp500,materials,2026-07-22
+ED,Consolidated Edison,sp500,utilities,2026-07-22
+EFX,Equifax,sp500,industrials,2026-07-22
+EG,Everest Group,sp500,financials,2026-07-22
+EIX,Edison International,sp500,utilities,2026-07-22
+EL,Estée Lauder Companies (The),sp500,consumer_staples,2026-07-22
+ELV,Elevance Health,sp500,health_care,2026-07-22
+EME,Emcor,sp500,industrials,2026-07-22
+EMR,Emerson Electric,sp500,industrials,2026-07-22
+EOG,EOG Resources,sp500,energy,2026-07-22
+EQIX,Equinix,sp500,real_estate,2026-07-22
+EQR,Equity Residential,sp500,real_estate,2026-07-22
+EQT,EQT Corporation,sp500,energy,2026-07-22
+ERIE,Erie Indemnity,sp500,financials,2026-07-22
+ES,Eversource Energy,sp500,utilities,2026-07-22
+ESS,Essex Property Trust,sp500,real_estate,2026-07-22
+ETN,Eaton Corporation,sp500,industrials,2026-07-22
+ETR,Entergy,sp500,utilities,2026-07-22
+EVRG,Evergy,sp500,utilities,2026-07-22
+EW,Edwards Lifesciences,sp500,health_care,2026-07-22
+EXC,Exelon,both,utilities,2026-07-22
+EXE,Expand Energy,sp500,energy,2026-07-22
+EXPD,Expeditors International,sp500,industrials,2026-07-22
+EXPE,Expedia Group,sp500,consumer_discretionary,2026-07-22
+EXR,Extra Space Storage,sp500,real_estate,2026-07-22
+F,Ford Motor Company,sp500,consumer_discretionary,2026-07-22
+FANG,Diamondback Energy,both,energy,2026-07-22
+FAST,Fastenal,both,industrials,2026-07-22
+FCX,Freeport-McMoRan,sp500,materials,2026-07-22
+FDS,FactSet,sp500,financials,2026-07-22
+FDX,FedEx,sp500,industrials,2026-07-22
+FDXF,FedEx Freight,sp500,industrials,2026-07-22
+FE,FirstEnergy,sp500,utilities,2026-07-22
+FER,Ferrovial,ndx100,,2026-07-22
+FFIV,"F5, Inc.",sp500,information_technology,2026-07-22
+FICO,Fair Isaac,sp500,information_technology,2026-07-22
+FIS,Fidelity National Information Services,sp500,financials,2026-07-22
+FISV,Fiserv,sp500,financials,2026-07-22
+FITB,Fifth Third Bancorp,sp500,financials,2026-07-22
+FIX,Comfort Systems USA,sp500,industrials,2026-07-22
+FLEX,Flex Ltd.,sp500,information_technology,2026-07-22
+FOX,Fox Corporation (Class B),sp500,communication_services,2026-07-22
+FOXA,Fox Corporation (Class A),sp500,communication_services,2026-07-22
+FRT,Federal Realty Investment Trust,sp500,real_estate,2026-07-22
+FSLR,First Solar,sp500,information_technology,2026-07-22
+FTNT,Fortinet,both,information_technology,2026-07-22
+FTV,Fortive,sp500,industrials,2026-07-22
+GD,General Dynamics,sp500,industrials,2026-07-22
+GDDY,GoDaddy,sp500,information_technology,2026-07-22
+GE,GE Aerospace,sp500,industrials,2026-07-22
+GEHC,GE HealthCare,both,health_care,2026-07-22
+GEN,Gen Digital,sp500,information_technology,2026-07-22
+GEV,GE Vernova,sp500,industrials,2026-07-22
+GILD,Gilead Sciences,both,health_care,2026-07-22
+GIS,General Mills,sp500,consumer_staples,2026-07-22
+GL,Globe Life,sp500,financials,2026-07-22
+GLW,Corning Inc.,sp500,information_technology,2026-07-22
+GM,General Motors,sp500,consumer_discretionary,2026-07-22
+GNRC,Generac,sp500,industrials,2026-07-22
+GOOG,Alphabet Inc. (Class C),both,communication_services,2026-07-22
+GOOGL,Alphabet Inc. (Class A),both,communication_services,2026-07-22
+GPC,Genuine Parts Company,sp500,consumer_discretionary,2026-07-22
+GPN,Global Payments,sp500,financials,2026-07-22
+GRMN,Garmin,sp500,consumer_discretionary,2026-07-22
+GS,Goldman Sachs,sp500,financials,2026-07-22
+GWW,W. W. Grainger,sp500,industrials,2026-07-22
+HAL,Halliburton,sp500,energy,2026-07-22
+HAS,Hasbro,sp500,consumer_discretionary,2026-07-22
+HBAN,Huntington Bancshares,sp500,financials,2026-07-22
+HCA,HCA Healthcare,sp500,health_care,2026-07-22
+HD,Home Depot (The),sp500,consumer_discretionary,2026-07-22
+HIG,Hartford (The),sp500,financials,2026-07-22
+HII,Huntington Ingalls Industries,sp500,industrials,2026-07-22
+HLT,Hilton Worldwide,sp500,consumer_discretionary,2026-07-22
+HON,Honeywell Technologies,both,industrials,2026-07-22
+HONA,Honeywell Aerospace,both,industrials,2026-07-22
+HOOD,Robinhood Markets,sp500,financials,2026-07-22
+HPE,Hewlett Packard Enterprise,sp500,information_technology,2026-07-22
+HPQ,HP Inc.,sp500,information_technology,2026-07-22
+HRL,Hormel Foods,sp500,consumer_staples,2026-07-22
+HSIC,Henry Schein,sp500,health_care,2026-07-22
+HST,Host Hotels & Resorts,sp500,real_estate,2026-07-22
+HSY,Hershey Company (The),sp500,consumer_staples,2026-07-22
+HUBB,Hubbell Incorporated,sp500,industrials,2026-07-22
+HUM,Humana,sp500,health_care,2026-07-22
+HWM,Howmet Aerospace,sp500,industrials,2026-07-22
+IBKR,Interactive Brokers,sp500,financials,2026-07-22
+IBM,IBM,sp500,information_technology,2026-07-22
+ICE,Intercontinental Exchange,sp500,financials,2026-07-22
+IDXX,Idexx Laboratories,both,health_care,2026-07-22
+IEX,IDEX Corporation,sp500,industrials,2026-07-22
+IFF,International Flavors & Fragrances,sp500,materials,2026-07-22
+INCY,Incyte,sp500,health_care,2026-07-22
+INTC,Intel,both,information_technology,2026-07-22
+INTU,Intuit,both,information_technology,2026-07-22
+INVH,Invitation Homes,sp500,real_estate,2026-07-22
+IP,International Paper,sp500,materials,2026-07-22
+IQV,IQVIA,sp500,health_care,2026-07-22
+IR,Ingersoll Rand,sp500,industrials,2026-07-22
+IRM,Iron Mountain,sp500,real_estate,2026-07-22
+ISRG,Intuitive Surgical,both,health_care,2026-07-22
+IT,Gartner,sp500,information_technology,2026-07-22
+ITW,Illinois Tool Works,sp500,industrials,2026-07-22
+IVZ,Invesco,sp500,financials,2026-07-22
+J,Jacobs Solutions,sp500,industrials,2026-07-22
+JBHT,J.B. Hunt,sp500,industrials,2026-07-22
+JBL,Jabil,sp500,information_technology,2026-07-22
+JCI,Johnson Controls,sp500,industrials,2026-07-22
+JKHY,Jack Henry & Associates,sp500,financials,2026-07-22
+JNJ,Johnson & Johnson,sp500,health_care,2026-07-22
+JPM,JPMorgan Chase,sp500,financials,2026-07-22
+KDP,Keurig Dr Pepper,both,consumer_staples,2026-07-22
+KEY,KeyCorp,sp500,financials,2026-07-22
+KEYS,Keysight Technologies,sp500,information_technology,2026-07-22
+KHC,Kraft Heinz,both,consumer_staples,2026-07-22
+KIM,Kimco Realty,sp500,real_estate,2026-07-22
+KKR,KKR & Co.,sp500,financials,2026-07-22
+KLAC,KLA Corporation,both,information_technology,2026-07-22
+KMB,Kimberly-Clark,sp500,consumer_staples,2026-07-22
+KMI,Kinder Morgan,sp500,energy,2026-07-22
+KO,Coca-Cola Company (The),sp500,consumer_staples,2026-07-22
+KR,Kroger,sp500,consumer_staples,2026-07-22
+KVUE,Kenvue,sp500,consumer_staples,2026-07-22
+L,Loews Corporation,sp500,financials,2026-07-22
+LDOS,Leidos,sp500,industrials,2026-07-22
+LEN,Lennar,sp500,consumer_discretionary,2026-07-22
+LH,Labcorp,sp500,health_care,2026-07-22
+LHX,L3Harris,sp500,industrials,2026-07-22
+LII,Lennox International,sp500,industrials,2026-07-22
+LIN,Linde plc,both,materials,2026-07-22
+LITE,Lumentum,both,information_technology,2026-07-22
+LLY,Lilly (Eli),sp500,health_care,2026-07-22
+LMT,Lockheed Martin,sp500,industrials,2026-07-22
+LNT,Alliant Energy,sp500,utilities,2026-07-22
+LOW,Lowe's,sp500,consumer_discretionary,2026-07-22
+LRCX,Lam Research,both,information_technology,2026-07-22
+LULU,Lululemon Athletica,sp500,consumer_discretionary,2026-07-22
+LUV,Southwest Airlines,sp500,industrials,2026-07-22
+LVS,Las Vegas Sands,sp500,consumer_discretionary,2026-07-22
+LYB,LyondellBasell,sp500,materials,2026-07-22
+LYV,Live Nation Entertainment,sp500,communication_services,2026-07-22
+MA,Mastercard,sp500,financials,2026-07-22
+MAA,Mid-America Apartment Communities,sp500,real_estate,2026-07-22
+MAR,Marriott International,both,consumer_discretionary,2026-07-22
+MAS,Masco,sp500,industrials,2026-07-22
+MCD,McDonald's,sp500,consumer_discretionary,2026-07-22
+MCHP,Microchip Technology,both,information_technology,2026-07-22
+MCK,McKesson Corporation,sp500,health_care,2026-07-22
+MCO,Moody's Corporation,sp500,financials,2026-07-22
+MDLZ,Mondelez International,both,consumer_staples,2026-07-22
+MDT,Medtronic,sp500,health_care,2026-07-22
+MELI,Mercado Libre,ndx100,,2026-07-22
+MET,MetLife,sp500,financials,2026-07-22
+META,Meta Platforms,both,communication_services,2026-07-22
+MGM,MGM Resorts,sp500,consumer_discretionary,2026-07-22
+MKC,McCormick & Company,sp500,consumer_staples,2026-07-22
+MLM,Martin Marietta Materials,sp500,materials,2026-07-22
+MMM,3M,sp500,industrials,2026-07-22
+MNST,Monster Beverage,both,consumer_staples,2026-07-22
+MO,Altria,sp500,consumer_staples,2026-07-22
+MOS,Mosaic Company (The),sp500,materials,2026-07-22
+MPC,Marathon Petroleum,sp500,energy,2026-07-22
+MPWR,Monolithic Power Systems,both,information_technology,2026-07-22
+MRK,Merck & Co.,sp500,health_care,2026-07-22
+MRNA,Moderna,sp500,health_care,2026-07-22
+MRSH,Marsh McLennan,sp500,financials,2026-07-22
+MRVL,Marvell Technology,both,information_technology,2026-07-22
+MS,Morgan Stanley,sp500,financials,2026-07-22
+MSCI,MSCI Inc.,sp500,financials,2026-07-22
+MSFT,Microsoft,both,information_technology,2026-07-22
+MSI,Motorola Solutions,sp500,information_technology,2026-07-22
+MSTR,MicroStrategy,ndx100,,2026-07-22
+MTB,M&T Bank,sp500,financials,2026-07-22
+MTD,Mettler Toledo,sp500,health_care,2026-07-22
+MU,Micron Technology,both,information_technology,2026-07-22
+NBIS,Nebius Group,ndx100,,2026-07-22
+NCLH,Norwegian Cruise Line Holdings,sp500,consumer_discretionary,2026-07-22
+NDAQ,"Nasdaq, Inc.",sp500,financials,2026-07-22
+NDSN,Nordson Corporation,sp500,industrials,2026-07-22
+NEE,NextEra Energy,sp500,utilities,2026-07-22
+NEM,Newmont,sp500,materials,2026-07-22
+NFLX,Netflix,both,communication_services,2026-07-22
+NI,NiSource,sp500,utilities,2026-07-22
+NKE,"Nike, Inc.",sp500,consumer_discretionary,2026-07-22
+NOC,Northrop Grumman,sp500,industrials,2026-07-22
+NOW,ServiceNow,sp500,information_technology,2026-07-22
+NRG,NRG Energy,sp500,utilities,2026-07-22
+NSC,Norfolk Southern,sp500,industrials,2026-07-22
+NTAP,NetApp,sp500,information_technology,2026-07-22
+NTRS,Northern Trust,sp500,financials,2026-07-22
+NUE,Nucor,sp500,materials,2026-07-22
+NVDA,Nvidia,both,information_technology,2026-07-22
+NVR,"NVR, Inc.",sp500,consumer_discretionary,2026-07-22
+NWS,News Corp (Class B),sp500,communication_services,2026-07-22
+NWSA,News Corp (Class A),sp500,communication_services,2026-07-22
+NXPI,NXP Semiconductors,both,information_technology,2026-07-22
+O,Realty Income,sp500,real_estate,2026-07-22
+ODFL,Old Dominion,both,industrials,2026-07-22
+OKE,Oneok,sp500,energy,2026-07-22
+OMC,Omnicom Group,sp500,communication_services,2026-07-22
+ON,ON Semiconductor,sp500,information_technology,2026-07-22
+ORCL,Oracle Corporation,sp500,information_technology,2026-07-22
+ORLY,O’Reilly Automotive,both,consumer_discretionary,2026-07-22
+OTIS,Otis Worldwide,sp500,industrials,2026-07-22
+OXY,Occidental Petroleum,sp500,energy,2026-07-22
+PANW,Palo Alto Networks,both,information_technology,2026-07-22
+PAYX,Paychex,both,industrials,2026-07-22
+PCAR,Paccar,both,industrials,2026-07-22
+PCG,PG&E Corporation,sp500,utilities,2026-07-22
+PDD,PDD Holdings,ndx100,,2026-07-22
+PEG,Public Service Enterprise Group,sp500,utilities,2026-07-22
+PEP,PepsiCo,both,consumer_staples,2026-07-22
+PFE,Pfizer,sp500,health_care,2026-07-22
+PFG,Principal Financial Group,sp500,financials,2026-07-22
+PG,Procter & Gamble,sp500,consumer_staples,2026-07-22
+PGR,Progressive Corporation,sp500,financials,2026-07-22
+PH,Parker Hannifin,sp500,industrials,2026-07-22
+PHM,PulteGroup,sp500,consumer_discretionary,2026-07-22
+PKG,Packaging Corporation of America,sp500,materials,2026-07-22
+PLD,Prologis,sp500,real_estate,2026-07-22
+PLTR,Palantir Technologies,both,information_technology,2026-07-22
+PM,Philip Morris International,sp500,consumer_staples,2026-07-22
+PNC,PNC Financial Services,sp500,financials,2026-07-22
+PNR,Pentair,sp500,industrials,2026-07-22
+PNW,Pinnacle West Capital,sp500,utilities,2026-07-22
+PODD,Insulet Corporation,sp500,health_care,2026-07-22
+PPG,PPG Industries,sp500,materials,2026-07-22
+PPL,PPL Corporation,sp500,utilities,2026-07-22
+PRU,Prudential Financial,sp500,financials,2026-07-22
+PSA,Public Storage,sp500,real_estate,2026-07-22
+PSKY,Paramount Skydance Corporation,sp500,communication_services,2026-07-22
+PSX,Phillips 66,sp500,energy,2026-07-22
+PTC,PTC Inc.,sp500,information_technology,2026-07-22
+PWR,Quanta Services,sp500,industrials,2026-07-22
+PYPL,PayPal,both,financials,2026-07-22
+Q,Qnity Electronics,sp500,information_technology,2026-07-22
+QCOM,Qualcomm,both,information_technology,2026-07-22
+RCL,Royal Caribbean Group,sp500,consumer_discretionary,2026-07-22
+REG,Regency Centers,sp500,real_estate,2026-07-22
+REGN,Regeneron Pharmaceuticals,both,health_care,2026-07-22
+RF,Regions Financial Corporation,sp500,financials,2026-07-22
+RJF,Raymond James Financial,sp500,financials,2026-07-22
+RKLB,Rocket Lab,ndx100,,2026-07-22
+RL,Ralph Lauren Corporation,sp500,consumer_discretionary,2026-07-22
+RMD,ResMed,sp500,health_care,2026-07-22
+ROK,Rockwell Automation,sp500,industrials,2026-07-22
+ROL,"Rollins, Inc.",sp500,industrials,2026-07-22
+ROP,Roper Technologies,both,information_technology,2026-07-22
+ROST,Ross Stores,both,consumer_discretionary,2026-07-22
+RSG,Republic Services,sp500,industrials,2026-07-22
+RTX,RTX Corporation,sp500,industrials,2026-07-22
+RVTY,Revvity,sp500,health_care,2026-07-22
+SBAC,SBA Communications,sp500,real_estate,2026-07-22
+SBUX,Starbucks,both,consumer_discretionary,2026-07-22
+SCHW,Charles Schwab Corporation,sp500,financials,2026-07-22
+SHOP,Shopify,ndx100,,2026-07-22
+SHW,Sherwin-Williams,sp500,materials,2026-07-22
+SJM,J.M. Smucker Company (The),sp500,consumer_staples,2026-07-22
+SLB,Schlumberger,sp500,energy,2026-07-22
+SMCI,Supermicro,sp500,information_technology,2026-07-22
+SNA,Snap-on,sp500,industrials,2026-07-22
+SNDK,Sandisk,both,information_technology,2026-07-22
+SNPS,Synopsys,both,information_technology,2026-07-22
+SO,Southern Company,sp500,utilities,2026-07-22
+SOLV,Solventum,sp500,health_care,2026-07-22
+SPCX,SpaceX,ndx100,,2026-07-22
+SPG,Simon Property Group,sp500,real_estate,2026-07-22
+SPGI,S&P Global,sp500,financials,2026-07-22
+SRE,Sempra,sp500,utilities,2026-07-22
+STE,Steris,sp500,health_care,2026-07-22
+STLD,Steel Dynamics,sp500,materials,2026-07-22
+STT,State Street Corporation,sp500,financials,2026-07-22
+STX,Seagate Technology,both,information_technology,2026-07-22
+STZ,Constellation Brands,sp500,consumer_staples,2026-07-22
+SW,Smurfit Westrock,sp500,materials,2026-07-22
+SWK,Stanley Black & Decker,sp500,industrials,2026-07-22
+SWKS,Skyworks Solutions,sp500,information_technology,2026-07-22
+SYF,Synchrony Financial,sp500,financials,2026-07-22
+SYK,Stryker Corporation,sp500,health_care,2026-07-22
+SYY,Sysco,sp500,consumer_staples,2026-07-22
+T,AT&T,sp500,communication_services,2026-07-22
+TAP,Molson Coors Beverage Company,sp500,consumer_staples,2026-07-22
+TDG,TransDigm Group,sp500,industrials,2026-07-22
+TDY,Teledyne Technologies,sp500,information_technology,2026-07-22
+TECH,Bio-Techne,sp500,health_care,2026-07-22
+TEL,TE Connectivity,sp500,information_technology,2026-07-22
+TER,Teradyne,both,information_technology,2026-07-22
+TFC,Truist Financial,sp500,financials,2026-07-22
+TGT,Target Corporation,sp500,consumer_staples,2026-07-22
+TJX,TJX Companies,sp500,consumer_discretionary,2026-07-22
+TKO,TKO Group Holdings,sp500,communication_services,2026-07-22
+TMO,Thermo Fisher Scientific,sp500,health_care,2026-07-22
+TMUS,T-Mobile US,both,communication_services,2026-07-22
+TPL,Texas Pacific Land Corporation,sp500,energy,2026-07-22
+TPR,"Tapestry, Inc.",sp500,consumer_discretionary,2026-07-22
+TRGP,Targa Resources,sp500,energy,2026-07-22
+TRI,Thomson Reuters,ndx100,,2026-07-22
+TRMB,Trimble Inc.,sp500,information_technology,2026-07-22
+TROW,T. Rowe Price,sp500,financials,2026-07-22
+TRV,Travelers Companies (The),sp500,financials,2026-07-22
+TSCO,Tractor Supply,sp500,consumer_discretionary,2026-07-22
+TSLA,"Tesla, Inc.",both,consumer_discretionary,2026-07-22
+TSN,Tyson Foods,sp500,consumer_staples,2026-07-22
+TT,Trane Technologies,sp500,industrials,2026-07-22
+TTD,Trade Desk (The),sp500,communication_services,2026-07-22
+TTWO,Take-Two Interactive,both,communication_services,2026-07-22
+TXN,Texas Instruments,both,information_technology,2026-07-22
+TXT,Textron,sp500,industrials,2026-07-22
+TYL,Tyler Technologies,sp500,information_technology,2026-07-22
+UAL,United Airlines Holdings,sp500,industrials,2026-07-22
+UBER,Uber,sp500,industrials,2026-07-22
+UDR,"UDR, Inc.",sp500,real_estate,2026-07-22
+UHS,Universal Health Services,sp500,health_care,2026-07-22
+ULTA,Ulta Beauty,sp500,consumer_discretionary,2026-07-22
+UNH,UnitedHealth Group,sp500,health_care,2026-07-22
+UNP,Union Pacific Corporation,sp500,industrials,2026-07-22
+UPS,United Parcel Service,sp500,industrials,2026-07-22
+URI,United Rentals,sp500,industrials,2026-07-22
+USB,U.S. Bancorp,sp500,financials,2026-07-22
+V,Visa Inc.,sp500,financials,2026-07-22
+VEEV,Veeva Systems,sp500,health_care,2026-07-22
+VICI,Vici Properties,sp500,real_estate,2026-07-22
+VLO,Valero Energy,sp500,energy,2026-07-22
+VLTO,Veralto,sp500,industrials,2026-07-22
+VMC,Vulcan Materials Company,sp500,materials,2026-07-22
+VRSK,Verisk Analytics,sp500,industrials,2026-07-22
+VRSN,Verisign,sp500,information_technology,2026-07-22
+VRT,Vertiv,sp500,industrials,2026-07-22
+VRTX,Vertex Pharmaceuticals,both,health_care,2026-07-22
+VST,Vistra Corp.,sp500,utilities,2026-07-22
+VTR,Ventas,sp500,real_estate,2026-07-22
+VTRS,Viatris,sp500,health_care,2026-07-22
+VZ,Verizon,sp500,communication_services,2026-07-22
+WAB,Wabtec,sp500,industrials,2026-07-22
+WAT,Waters Corporation,sp500,health_care,2026-07-22
+WBD,Warner Bros. Discovery,both,communication_services,2026-07-22
+WDAY,"Workday, Inc.",both,information_technology,2026-07-22
+WDC,Western Digital,both,information_technology,2026-07-22
+WEC,WEC Energy Group,sp500,utilities,2026-07-22
+WELL,Welltower,sp500,real_estate,2026-07-22
+WFC,Wells Fargo,sp500,financials,2026-07-22
+WM,Waste Management,sp500,industrials,2026-07-22
+WMB,Williams Companies,sp500,energy,2026-07-22
+WMT,Walmart,both,consumer_staples,2026-07-22
+WRB,W. R. Berkley Corporation,sp500,financials,2026-07-22
+WSM,"Williams-Sonoma, Inc.",sp500,consumer_discretionary,2026-07-22
+WST,West Pharmaceutical Services,sp500,health_care,2026-07-22
+WTW,Willis Towers Watson,sp500,financials,2026-07-22
+WY,Weyerhaeuser,sp500,real_estate,2026-07-22
+WYNN,Wynn Resorts,sp500,consumer_discretionary,2026-07-22
+XEL,Xcel Energy,both,utilities,2026-07-22
+XOM,ExxonMobil,sp500,energy,2026-07-22
+XYL,Xylem Inc.,sp500,industrials,2026-07-22
+XYZ,"Block, Inc.",sp500,financials,2026-07-22
+YUM,Yum! Brands,sp500,consumer_discretionary,2026-07-22
+ZBH,Zimmer Biomet,sp500,health_care,2026-07-22
+ZBRA,Zebra Technologies,sp500,information_technology,2026-07-22
+ZTS,Zoetis,sp500,health_care,2026-07-22

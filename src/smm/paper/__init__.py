@@ -6,6 +6,7 @@ This package deliberately does not contain task orchestration or broker I/O.
 from smm.paper.circuits import CircuitInputs, CircuitState, evaluate_circuit_state
 from smm.paper.costs import ExecutionQuote, quote_next_open
 from smm.paper.entries import EntryAssessment, EntryStatus, assess_next_open_entry
+from smm.paper.excursions import PositionExcursionState, update_position_excursion
 from smm.paper.exits import (
     CloseExitAssessment,
     CloseExitStatus,
@@ -28,6 +29,7 @@ __all__ = [
     "EntryStatus",
     "ExecutionQuote",
     "OpenPaperPosition",
+    "PositionExcursionState",
     "SplitAction",
     "SplitActionHistory",
     "StopAssessmentStatus",
@@ -38,4 +40,5 @@ __all__ = [
     "evaluate_circuit_state",
     "quote_next_open",
     "rebuild_print_bars",
+    "update_position_excursion",
 ]

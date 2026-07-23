@@ -160,6 +160,24 @@ def test_execution_context_scales_risk_and_is_audited(risk_config) -> None:
     assert decision.circuit_state_identity == "circuit-drawdown-reduce"
 
 
+def test_neutral_execution_context_scales_risk_and_is_audited(risk_config) -> None:
+    context = execution_context(
+        entry_risk_multiplier="0.5",
+        circuit_state_identity="circuit-neutral-drawdown-reduce",
+    )
+
+    decision = evaluate_risk_batch(
+        [candidate("AAA", regime=MarketRegime.NEUTRAL)],
+        portfolio(),
+        risk_config,
+        execution_context=context,
+    )[0]
+
+    assert decision.quantity == 11
+    assert decision.entry_risk_multiplier == Decimal("0.5")
+    assert decision.circuit_state_identity == "circuit-neutral-drawdown-reduce"
+
+
 def test_execution_context_identity_mismatch_fails_closed(risk_config) -> None:
     with pytest.raises(RiskValidationError, match="execution context identity mismatch"):
         evaluate_risk_batch(

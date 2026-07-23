@@ -291,6 +291,36 @@ class PortfolioSnapshot(BaseModel):
         return self
 
 
+class RiskExecutionContext(BaseModel):
+    """Explicit M7 circuit facts applied to an M5 sizing pass.
+
+    This is additive to frozen config: the caller records the originating
+    circuit-state identity rather than deriving or mutating a second config.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    as_of: date
+    strategy_version: str
+    config_hash: str
+    entry_risk_multiplier: Decimal = Field(ge=0, le=1)
+    circuit_state_identity: str
+
+    @field_validator("strategy_version", "config_hash", "circuit_state_identity")
+    @classmethod
+    def identity_fields_are_nonempty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("risk execution context identity fields must be non-empty")
+        return value
+
+    @field_validator("entry_risk_multiplier")
+    @classmethod
+    def multiplier_is_finite(cls, value: Decimal) -> Decimal:
+        if not value.is_finite():
+            raise ValueError("entry_risk_multiplier must be finite")
+        return value
+
+
 class RiskDecision(BaseModel):
     """Deterministic M5 plan decision; never an order or fill."""
 
@@ -301,6 +331,8 @@ class RiskDecision(BaseModel):
     as_of: date
     strategy_version: str
     config_hash: str
+    entry_risk_multiplier: Decimal = Field(ge=0, le=1)
+    circuit_state_identity: str
     verdict: RiskVerdict
     reason_codes: tuple[str, ...] = Field(min_length=1)
     quantity: int = Field(ge=0)
@@ -312,6 +344,20 @@ class RiskDecision(BaseModel):
     sector: str
     risk_cluster: str
     regime: MarketRegime
+
+    @field_validator("strategy_version", "config_hash", "circuit_state_identity")
+    @classmethod
+    def identity_fields_are_nonempty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("risk decision identity fields must be non-empty")
+        return value
+
+    @field_validator("entry_risk_multiplier")
+    @classmethod
+    def multiplier_is_finite(cls, value: Decimal) -> Decimal:
+        if not value.is_finite():
+            raise ValueError("entry_risk_multiplier must be finite")
+        return value
 
     @model_validator(mode="after")
     def verdict_matches_planned_size(self) -> RiskDecision:

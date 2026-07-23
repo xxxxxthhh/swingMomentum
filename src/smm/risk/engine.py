@@ -1,7 +1,8 @@
-"""M5 deterministic risk decisions and planned whole-share sizing.
+"""M5 deterministic risk decisions with M7 circuit-aware whole-share sizing.
 
 This module consumes already-validated domain inputs. It never reads a market
-bar, creates an order/fill/position, or writes lifecycle state.
+bar, creates an order/fill/position, writes lifecycle state, or mutates frozen
+config; M7 supplies the immutable execution context explicitly.
 """
 
 from __future__ import annotations
@@ -12,7 +13,12 @@ from decimal import ROUND_FLOOR, Decimal
 from smm.config.schema import RiskSection
 from smm.core.errors import FailClosedError
 from smm.domain.enums import MarketRegime, RiskVerdict
-from smm.domain.models import EligibleCandidate, PortfolioSnapshot, RiskDecision
+from smm.domain.models import (
+    EligibleCandidate,
+    PortfolioSnapshot,
+    RiskDecision,
+    RiskExecutionContext,
+)
 
 _ZERO = Decimal(0)
 
@@ -58,6 +64,7 @@ def _validate_batch(
     candidates: Sequence[EligibleCandidate],
     portfolio: PortfolioSnapshot,
     risk: RiskSection,
+    execution_context: RiskExecutionContext,
 ) -> None:
     if risk.risk_off_per_trade != 0:
         raise RiskValidationError("risk_off_per_trade must be zero")
@@ -74,6 +81,13 @@ def _validate_batch(
         raise RiskValidationError("risk batch contains mixed regimes")
 
     expected = (portfolio.as_of, portfolio.strategy_version, portfolio.config_hash)
+    context_identity = (
+        execution_context.as_of,
+        execution_context.strategy_version,
+        execution_context.config_hash,
+    )
+    if context_identity != expected:
+        raise RiskValidationError("risk execution context identity mismatch")
     for candidate in candidates:
         identity = (candidate.as_of, candidate.strategy_version, candidate.config_hash)
         if identity != expected:
@@ -85,6 +99,7 @@ def _validate_batch(
 def _decision(
     candidate: EligibleCandidate,
     *,
+    execution_context: RiskExecutionContext,
     verdict: RiskVerdict,
     reason_codes: tuple[str, ...],
     quantity: int = 0,
@@ -97,6 +112,8 @@ def _decision(
         as_of=candidate.as_of,
         strategy_version=candidate.strategy_version,
         config_hash=candidate.config_hash,
+        entry_risk_multiplier=execution_context.entry_risk_multiplier,
+        circuit_state_identity=execution_context.circuit_state_identity,
         verdict=verdict,
         reason_codes=reason_codes,
         quantity=quantity,
@@ -115,9 +132,13 @@ def evaluate_risk_batch(
     candidates: Sequence[EligibleCandidate],
     portfolio: PortfolioSnapshot,
     risk: RiskSection,
+    *,
+    execution_context: RiskExecutionContext,
 ) -> tuple[RiskDecision, ...]:
-    """Return deterministic risk decisions after in-batch budget reservation."""
-    _validate_batch(candidates, portfolio, risk)
+    """Return deterministic decisions with an explicit circuit execution context."""
+    if not isinstance(execution_context, RiskExecutionContext):
+        raise RiskValidationError("risk execution context is required")
+    _validate_batch(candidates, portfolio, risk, execution_context)
 
     cash = portfolio.available_cash
     gross_exposure = portfolio.gross_exposure_capital
@@ -133,6 +154,7 @@ def evaluate_risk_batch(
             decisions.append(
                 _decision(
                     candidate,
+                    execution_context=execution_context,
                     verdict=RiskVerdict.REJECT,
                     reason_codes=("risk_new_entries_kill_switch",),
                 )
@@ -142,6 +164,7 @@ def evaluate_risk_batch(
             decisions.append(
                 _decision(
                     candidate,
+                    execution_context=execution_context,
                     verdict=RiskVerdict.REJECT,
                     reason_codes=("risk_off_new_entries_blocked",),
                 )
@@ -151,6 +174,7 @@ def evaluate_risk_batch(
             decisions.append(
                 _decision(
                     candidate,
+                    execution_context=execution_context,
                     verdict=RiskVerdict.REJECT,
                     reason_codes=("risk_symbol_already_open",),
                 )
@@ -158,10 +182,16 @@ def evaluate_risk_batch(
             continue
 
         if candidate.regime is MarketRegime.RISK_ON:
-            risk_per_trade = _decimal(risk.risk_on_per_trade)
+            risk_per_trade = (
+                _decimal(risk.risk_on_per_trade)
+                * execution_context.entry_risk_multiplier
+            )
             max_exposure = _decimal(risk.risk_on_max_exposure)
         else:
-            risk_per_trade = _decimal(risk.neutral_per_trade)
+            risk_per_trade = (
+                _decimal(risk.neutral_per_trade)
+                * execution_context.entry_risk_multiplier
+            )
             max_exposure = _decimal(risk.neutral_max_exposure)
 
         equity = portfolio.account_equity
@@ -200,7 +230,12 @@ def evaluate_risk_batch(
                 if capacities[name] == 0
             )
             decisions.append(
-                _decision(candidate, verdict=RiskVerdict.REJECT, reason_codes=reasons)
+                _decision(
+                    candidate,
+                    execution_context=execution_context,
+                    verdict=RiskVerdict.REJECT,
+                    reason_codes=reasons,
+                )
             )
             continue
 
@@ -211,6 +246,7 @@ def evaluate_risk_batch(
         )
         decision = _decision(
             candidate,
+            execution_context=execution_context,
             verdict=RiskVerdict.ACCEPT,
             reason_codes=reasons,
             quantity=quantity,

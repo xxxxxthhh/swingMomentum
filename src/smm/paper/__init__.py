@@ -12,6 +12,14 @@ from smm.paper.exits import (
     CloseExitStatus,
     assess_close_exit,
 )
+from smm.paper.manual_decisions import (
+    ManualDecision,
+    ManualDecisionType,
+    ManualSkipRequest,
+    append_manual_skips,
+    manual_decision_path,
+    read_manual_decisions,
+)
 from smm.paper.orders import (
     PaperOrder,
     PaperOrderPurpose,
@@ -41,6 +49,9 @@ __all__ = [
     "EntryAssessment",
     "EntryStatus",
     "ExecutionQuote",
+    "ManualDecision",
+    "ManualDecisionType",
+    "ManualSkipRequest",
     "OpenPaperPosition",
     "PaperOrder",
     "PaperOrderPurpose",
@@ -55,9 +66,12 @@ __all__ = [
     "assess_close_exit",
     "assess_next_open_entry",
     "assess_long_stop",
+    "append_manual_skips",
     "append_paper_orders",
     "evaluate_circuit_state",
+    "manual_decision_path",
     "quote_next_open",
+    "read_manual_decisions",
     "paper_order_path",
     "read_paper_orders",
     "rebase_open_position_for_split",

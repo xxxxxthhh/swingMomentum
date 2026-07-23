@@ -172,12 +172,22 @@ def test_same_session_stop_prevents_close_exit_scheduling() -> None:
         assess(tradeable_bar=stopped_bar, stop_assessment=stopped)
 
 
-def test_close_exit_rejects_held_stop_with_mismatched_position_facts() -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quantity", 9),
+        ("initial_stop", Decimal("96")),
+    ],
+)
+def test_close_exit_rejects_held_stop_with_mismatched_position_facts(
+    field: str,
+    value: int | Decimal,
+) -> None:
     held_stop = assess_long_stop(
         position(),
         tradeable_bar(),
         execution=M6_CONFIG.execution,
-    ).model_copy(update={"quantity": 9})
+    ).model_copy(update={field: value})
 
     with pytest.raises(DataValidationError, match="identity or position facts"):
         assess(stop_assessment=held_stop)

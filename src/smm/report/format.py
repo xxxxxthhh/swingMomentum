@@ -14,9 +14,13 @@ Precision matches the existing CSV-serialization precedent in
 from __future__ import annotations
 
 import json
+from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from typing import Any
 
+from smm.core.errors import DataValidationError
+
 _FLOAT_PRECISION = 6
+_DECIMAL_QUANTUM = Decimal("0.000001")
 
 
 def format_float(value: float | None) -> str | None:
@@ -32,7 +36,29 @@ def format_float(value: float | None) -> str | None:
     return f"{value:.{_FLOAT_PRECISION}f}"
 
 
-def dump_json_deterministic(payload: dict[str, Any]) -> str:
+def format_decimal(value: Decimal) -> str:
+    """Render a finite Decimal using the audit contract's fixed six places.
+
+    Canonical Decimal rendering must not inherit an ambient context with too
+    little precision for a large integral value, and it must never pass
+    through a float. This shared primitive keeps CircuitState and RiskDecision
+    artifacts byte-compatible wherever they carry Decimal facts.
+    """
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise DataValidationError("audit Decimal must be finite")
+    integral_digits = max(value.adjusted() + 1, 1)
+    required_precision = max(
+        28,
+        len(value.as_tuple().digits),
+        integral_digits + _FLOAT_PRECISION + 1,
+    )
+    with localcontext() as context:
+        context.prec = required_precision
+        quantized = value.quantize(_DECIMAL_QUANTUM, rounding=ROUND_HALF_EVEN)
+    return format(quantized, "f")
+
+
+def dump_json_deterministic(payload: dict[str, Any] | list[Any]) -> str:
     """Canonical JSON text: sorted keys, fixed separators, trailing newline.
 
     No wall-clock, random run id, or absolute temp path may appear anywhere

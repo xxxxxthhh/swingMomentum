@@ -12,20 +12,18 @@ import hashlib
 import os
 import tempfile
 from datetime import date
-from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation, localcontext
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from smm.config.schema import RiskSection
 from smm.core.errors import DataValidationError
-from smm.report.format import dump_json_deterministic
+from smm.report.format import dump_json_deterministic, format_decimal
 
 _ZERO = Decimal(0)
 _ONE = Decimal(1)
 _HALF = Decimal("0.5")
-_IDENTITY_DECIMAL_PLACES = 6
-_IDENTITY_QUANTUM = Decimal("0.000001")
 _CIRCUIT_STATE_ARTIFACT_NAME = "circuit_state.json"
 _MANIFEST_NAME = "manifest.json"
 
@@ -242,14 +240,14 @@ def circuit_state_payload(state: CircuitState) -> dict[str, str | bool | list[st
         "as_of": state.as_of.isoformat(),
         "strategy_version": state.strategy_version,
         "config_hash": state.config_hash,
-        "realized_loss_r_for_session": _format_identity_decimal(
+        "realized_loss_r_for_session": format_decimal(
             state.realized_loss_r_for_session
         ),
-        "marked_equity": _format_identity_decimal(state.marked_equity),
-        "high_water_equity": _format_identity_decimal(state.high_water_equity),
-        "drawdown": _format_identity_decimal(state.drawdown),
+        "marked_equity": format_decimal(state.marked_equity),
+        "high_water_equity": format_decimal(state.high_water_equity),
+        "drawdown": format_decimal(state.drawdown),
         "new_entries_blocked": state.new_entries_blocked,
-        "entry_risk_multiplier": _format_identity_decimal(
+        "entry_risk_multiplier": format_decimal(
             state.entry_risk_multiplier
         ),
         "reason_codes": list(state.reason_codes),
@@ -347,27 +345,6 @@ def _accept_or_reject_existing_circuit_artifact(target: Path, text: str) -> None
         raise DataValidationError(
             f"conflicting circuit state artifact already exists for {target.parent.name}"
         )
-
-
-def _format_identity_decimal(value: Decimal) -> str:
-    """Render a finite Decimal with M4's fixed six-place convention.
-
-    Decimal's ambient context may have insufficient precision for a large
-    integral value, so canonical rendering pins a local precision instead of
-    inheriting caller or process state. No float conversion participates.
-    """
-    if not isinstance(value, Decimal) or not value.is_finite():
-        raise DataValidationError("circuit identity Decimal must be finite")
-    integral_digits = max(value.adjusted() + 1, 1)
-    required_precision = max(
-        28,
-        len(value.as_tuple().digits),
-        integral_digits + _IDENTITY_DECIMAL_PLACES + 1,
-    )
-    with localcontext() as context:
-        context.prec = required_precision
-        quantized = value.quantize(_IDENTITY_QUANTUM, rounding=ROUND_HALF_EVEN)
-    return format(quantized, "f")
 
 
 def _required_threshold(value: object, *, label: str) -> Decimal:

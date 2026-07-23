@@ -7,7 +7,12 @@ more expensive to trace than one caught here.
 
 from __future__ import annotations
 
-from smm.report.format import dump_json_deterministic, format_float
+from decimal import Decimal
+
+import pytest
+
+from smm.core.errors import DataValidationError
+from smm.report.format import dump_json_deterministic, format_decimal, format_float
 
 
 def test_format_float_is_stable_across_repeated_calls() -> None:
@@ -50,3 +55,17 @@ def test_dump_json_deterministic_ends_with_a_single_trailing_newline() -> None:
     text = dump_json_deterministic({"a": 1})
     assert text.endswith("\n")
     assert not text.endswith("\n\n")
+
+
+def test_dump_json_deterministic_accepts_a_top_level_array() -> None:
+    assert dump_json_deterministic([{"b": 1, "a": 2}]) == '[{"a":2,"b":1}]\n'
+
+
+def test_format_decimal_uses_fixed_six_places_without_float_conversion() -> None:
+    assert format_decimal(Decimal("0.1234567")) == "0.123457"
+    assert format_decimal(Decimal("100.1")) == "100.100000"
+
+
+def test_format_decimal_rejects_nonfinite_values() -> None:
+    with pytest.raises(DataValidationError, match="Decimal must be finite"):
+        format_decimal(Decimal("NaN"))

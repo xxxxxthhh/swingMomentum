@@ -15,6 +15,7 @@ from pathlib import Path
 from smm.core.errors import DataValidationError
 from smm.domain.models import RiskDecision
 from smm.report.format import dump_json_deterministic, format_decimal
+from smm.risk.batches import validate_risk_decision_batch
 
 _RISK_DECISIONS_ARTIFACT_NAME = "risk_decisions.json"
 _MANIFEST_NAME = "manifest.json"
@@ -57,7 +58,7 @@ def risk_decision_artifact_path(root: Path | str, as_of: date) -> Path:
 
 def render_risk_decisions_artifact(decisions: Sequence[RiskDecision]) -> str:
     """Render one bare JSON array in the supplied risk-evaluation order."""
-    batch = _validated_batch(decisions)
+    batch = validate_risk_decision_batch(decisions)
     return dump_json_deterministic([risk_decision_payload(item) for item in batch])
 
 
@@ -75,7 +76,7 @@ def write_risk_decisions_artifact(
     if not isinstance(as_of, date):
         raise DataValidationError("risk decision artifact as_of requires a date")
 
-    batch = _validated_batch(decisions)
+    batch = validate_risk_decision_batch(decisions)
     if any(item.as_of != as_of for item in batch):
         raise DataValidationError("risk decision as_of must match artifact session")
 
@@ -95,36 +96,6 @@ def write_risk_decisions_artifact(
     target.parent.mkdir(parents=True, exist_ok=True)
     _create_risk_artifact(target, text)
     return target
-
-
-def _validated_batch(decisions: Sequence[RiskDecision]) -> tuple[RiskDecision, ...]:
-    batch = tuple(decisions)
-    if any(not isinstance(item, RiskDecision) for item in batch):
-        raise DataValidationError("risk decision artifact requires RiskDecision items")
-    if len({item.signal_id for item in batch}) != len(batch):
-        raise DataValidationError("risk decision artifact cannot repeat signal_id")
-    if not batch:
-        return batch
-
-    first = batch[0]
-    expected_identity = (
-        first.as_of,
-        first.strategy_version,
-        first.config_hash,
-        first.circuit_state_identity,
-    )
-    if any(
-        (
-            item.as_of,
-            item.strategy_version,
-            item.config_hash,
-            item.circuit_state_identity,
-        )
-        != expected_identity
-        for item in batch[1:]
-    ):
-        raise DataValidationError("risk decision batch identity mismatch")
-    return batch
 
 
 def _create_risk_artifact(target: Path, text: str) -> None:

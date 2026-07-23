@@ -16,6 +16,11 @@ from smm.domain.models import (
     PortfolioSnapshot,
     RiskExecutionContext,
 )
+from smm.paper.circuits import (
+    CircuitState,
+    circuit_state_identity,
+    risk_execution_context_for,
+)
 from smm.risk.engine import RiskValidationError, evaluate_risk_batch
 
 AS_OF = date(2024, 6, 14)
@@ -151,6 +156,32 @@ def test_circuit_block_rejects_without_mutating_candidate_facts(regime, risk_con
     assert decision.regime is regime
     assert decision.circuit_state_identity == "circuit-daily-loss-pause"
     assert decision.entry_risk_multiplier == Decimal("1")
+
+
+def test_circuit_factory_preserves_the_existing_entry_block_rejection(risk_config) -> None:
+    state = CircuitState(
+        as_of=AS_OF,
+        strategy_version=VERSION,
+        config_hash=CONFIG_HASH,
+        realized_loss_r_for_session=Decimal("-5"),
+        marked_equity=Decimal("1000"),
+        high_water_equity=Decimal("1000"),
+        drawdown=Decimal("0"),
+        new_entries_blocked=True,
+        entry_risk_multiplier=Decimal("1"),
+        reason_codes=("circuit_daily_loss_pause",),
+    )
+
+    decision = evaluate_risk_batch(
+        [candidate("AAA", regime=MarketRegime.RISK_ON)],
+        portfolio(),
+        risk_config,
+        execution_context=risk_execution_context_for(state),
+    )[0]
+
+    assert decision.verdict is RiskVerdict.REJECT
+    assert decision.reason_codes == ("risk_off_new_entries_blocked",)
+    assert decision.circuit_state_identity == circuit_state_identity(state)
 
 
 @pytest.mark.parametrize("new_entries_blocked", [None, 1, "false"])

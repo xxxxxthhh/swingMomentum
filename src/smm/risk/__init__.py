@@ -1,4 +1,4 @@
-"""Pure M5 risk planning seam."""
+"""Pure M5 risk planning and M7 audit-projection seams."""
 
 from smm.risk.artifacts import (
     render_risk_decisions_artifact,
@@ -7,6 +7,7 @@ from smm.risk.artifacts import (
     write_risk_decisions_artifact,
 )
 from smm.risk.engine import RiskValidationError, evaluate_risk_batch
+from smm.risk.transitions import project_risk_decisions_to_transitions
 
 __all__ = [
     "RiskValidationError",
@@ -15,4 +16,5 @@ __all__ = [
     "risk_decision_artifact_path",
     "risk_decision_payload",
     "write_risk_decisions_artifact",
+    "project_risk_decisions_to_transitions",
 ]

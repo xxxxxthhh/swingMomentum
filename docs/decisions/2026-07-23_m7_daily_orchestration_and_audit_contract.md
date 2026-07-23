@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed（Issue #39 Task Reviewer 指导后，等待 ADR 复审） |
+| 状态 | accepted（rev.2；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受） |
 | 日期 | 2026-07-23 |
 | 策略版本 | 不改变冻结阈值或 config identity；本 ADR 只冻结 M7 编排与审计语义 |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§12.1、§26、§35、§53） |
@@ -227,3 +227,4 @@ candidate-adapter tests before it can label real symbols.
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-23 | proposed | Builder 根据 Issue #39 提出 M7 编排 ADR；Task Reviewer comment `5055842914` 已接受 canonical identity/mode boundary，并建议 Option 1b；等待对本 ADR 的整体复审。 |
+| 2026-07-23 | accepted（rev.2） | Task Reviewer comment `5056348471` 对精确 HEAD `7755c7259b7da143ee849af9329eb41ace3189b4` 完成复审并接受；PR #40 已合并。 |

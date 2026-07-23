@@ -1,15 +1,19 @@
-"""Pure M6 circuit-state assessment.
+"""M6 circuit-state assessment with narrow M7 artifact persistence.
 
 This module derives an auditable operational state from already-computed equity,
-realized-R, and integrity facts. It does not edit frozen config, mutate a risk
-decision, write a ledger, or orchestrate a daily task.
+realized-R, and integrity facts. Its M7 helper can persist only the canonical,
+immutable per-session audit artifact. It does not edit frozen config, mutate a
+risk decision, write a ledger, or orchestrate a daily task.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 from datetime import date
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation, localcontext
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
@@ -22,6 +26,8 @@ _ONE = Decimal(1)
 _HALF = Decimal("0.5")
 _IDENTITY_DECIMAL_PLACES = 6
 _IDENTITY_QUANTUM = Decimal("0.000001")
+_CIRCUIT_STATE_ARTIFACT_NAME = "circuit_state.json"
+_MANIFEST_NAME = "manifest.json"
 
 _INTEGRITY_HALT = "circuit_data_or_position_integrity_halt"
 _DRAWDOWN_STOP = "circuit_drawdown_stop_new_entries"
@@ -254,6 +260,93 @@ def circuit_state_identity(state: CircuitState) -> str:
     """Return the SHA-256 identity of M7's canonical CircuitState payload."""
     payload_text = dump_json_deterministic(circuit_state_payload(state))
     return hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+
+
+def circuit_state_artifact_path(root: Path | str, as_of: date) -> Path:
+    """Return the canonical M7 session-artifact location for ``as_of``.
+
+    ``root`` is the already-selected strategy-version/config-hash artifact
+    root. The M7 orchestrator owns mode selection; this pure seam only fixes
+    the per-session filename so shadow-mode assembly cannot invent variants.
+    """
+    if not isinstance(as_of, date):
+        raise DataValidationError("circuit artifact as_of requires a date")
+    return Path(root) / as_of.isoformat() / _CIRCUIT_STATE_ARTIFACT_NAME
+
+
+def render_circuit_state_artifact(state: CircuitState) -> str:
+    """Render a complete, deterministic CircuitState audit artifact.
+
+    The digest is intentionally outside the payload it authenticates: removing
+    ``circuit_state_identity`` and serializing the remaining keys with the
+    shared formatter reproduces the M7 identity exactly.
+    """
+    payload = circuit_state_payload(state)
+    return dump_json_deterministic(
+        {
+            **payload,
+            "circuit_state_identity": circuit_state_identity(state),
+        }
+    )
+
+
+def write_circuit_state_artifact(root: Path | str, state: CircuitState) -> Path:
+    """Create one immutable canonical CircuitState artifact for a session.
+
+    An exact rerun is a no-op. A changed payload at the same session location,
+    or an attempt to add the artifact after a session manifest exists, fails
+    closed. The latter prevents an already-completed M4 bundle from silently
+    growing into a shadow-mode result.
+    """
+    if not isinstance(state, CircuitState):
+        raise DataValidationError("circuit artifact requires CircuitState")
+
+    target = circuit_state_artifact_path(root, state.as_of)
+    text = render_circuit_state_artifact(state)
+    if target.exists():
+        _accept_or_reject_existing_circuit_artifact(target, text)
+        return target
+
+    manifest_file = target.parent / _MANIFEST_NAME
+    if manifest_file.exists():
+        raise DataValidationError(
+            "cannot add CircuitState artifact to completed session "
+            f"{state.as_of.isoformat()}; reruns must preserve manifest shape"
+        )
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _create_circuit_artifact(target, text)
+    return target
+
+
+def _create_circuit_artifact(target: Path, text: str) -> None:
+    """Atomically create ``target`` without replacing a concurrent artifact."""
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        temporary = Path(handle.name)
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            _accept_or_reject_existing_circuit_artifact(target, text)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _accept_or_reject_existing_circuit_artifact(target: Path, text: str) -> None:
+    if target.read_text(encoding="utf-8") != text:
+        raise DataValidationError(
+            f"conflicting circuit state artifact already exists for {target.parent.name}"
+        )
 
 
 def _format_identity_decimal(value: Decimal) -> str:

@@ -66,14 +66,26 @@ session X>D:   TRIGGERED -> RISK_ACCEPTED|RISK_REJECTED
 session X+1:   M6 的 next-session-open entry / re-risk（若 ACCEPT）
 ```
 
-通常 `X` 是紧接 `D` 的下一 provider session；若数据完整性、circuit 或日任务恢复
-使消费延后，`X` 就是实际评估日。`open_trigger` 因此继续表示尚未被 Risk 消费的
-真实 backlog，而不是一个只在异常日才有意义的遗留 bucket。
+通常 `X` 是紧接 `D` 的下一 provider session；若数据完整性缺口或日任务恢复使
+消费延后，`X` 就是实际评估日。`open_trigger` 因此继续表示尚未被 Risk 消费的真实
+backlog，而不是一个只在异常日才有意义的遗留 bucket。
+
+Circuit 不会把已调度在 `X` 消费的 backlog 变成 skip 或 requeue：它是该次
+RiskDecision 的既有输入。`new_entries_blocked=true` 时，M7 必须把候选交给既有
+`evaluate_risk_batch`，沿用 `risk_off_new_entries_blocked` 的 `REJECT` 结果，并在
+`X` 写终局的 `TRIGGERED -> RISK_REJECTED`；不得把它描述为 circuit 的暂缓，或新增
+未定义的再次排队/过期机制。未 block 的 multiplier 降低同样是该次 decision 的既有
+输入，不改变消费日。这样 circuit 改变 decision，不改变消费 schedule。
 
 这是对 M5 §8 在 **M7 编排时序** 的显式细化：该节所说的 risk transition 的
 `as_of` 是 `EligibleCandidate` 实际有效、Risk Engine 实际运行的 session `X`，
 不是原始 trigger session `D`。M3 的一日一跳、M4 的 `new_trigger` / `open_trigger`
 报告和已经提交的 `WATCHLISTED -> TRIGGERED` 行均不被重写。
+
+这不重启 M5 §8 所排除的「风险决策推迟到下一收盘」：被排除的是会破坏
+`decision session -> next-session open` 耦合的开放式延后；Option 1b 始终保持
+`RiskDecision(X) -> earliest X+1 open`，只把原 trigger 日 `D` 与 decision 日 `X`
+区分开。
 
 M7 首个实现只可从 run 开始前的 latest-state `TRIGGERED` 集合挑选 backlog；当日
 scanner 新产生的 `TRIGGERED` 不得在同一日被风险消费。candidate adapter 只能使用
@@ -182,14 +194,17 @@ candidate-adapter tests before it can label real symbols.
    backlog 被消费的 X 写一条 `TRIGGERED -> RISK_*`。
 2. 当日新 trigger 不会被同日 risk consumer 读取；`open_trigger` 在 risk 前后均可
    审计地解释。
-3. X 的 CircuitState 只影响 X 的 risk decision，entry 仍不早于 X+1 true-print
+3. `new_entries_blocked` 不会 defer/requeue X 的 backlog：它经既有 Risk Engine 写
+   `risk_off_new_entries_blocked` 的终局 `RISK_REJECTED`；仅数据完整性缺口或恢复会
+   使实际消费日变为较晚的 X。
+4. X 的 CircuitState 只影响 X 的 risk decision，entry 仍不早于 X+1 true-print
    open，且没有 Scanner 绕过 Risk Engine。
-4. 同一 CircuitState payload 在不同进程重放得到相同 digest；任一字段、Decimal
+5. 同一 CircuitState payload 在不同进程重放得到相同 digest；任一字段、Decimal
    表示或 reason-code 顺序变化都会被检测。
-5. 默认 M4 mode 的现有 byte-for-byte replay 不变；同日 mode switch 或 artifact
+6. 默认 M4 mode 的现有 byte-for-byte replay 不变；同日 mode switch 或 artifact
    hash 不同 fail closed；后续 session 使用 richer mode 可在同一 root 产生完整、
    mode-aware manifest。
-6. shadow 不创建任何 Paper ledger；paper 不连接 live broker；未知 risk cluster
+7. shadow 不创建任何 Paper ledger；paper 不连接 live broker；未知 risk cluster
    仍共享 `unclassified` 限额。
 
 发布前仍须运行目标测试、完整 pytest、Ruff 与 `git diff --check`，并在 PR 附上

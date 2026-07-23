@@ -160,6 +160,16 @@ def evaluate_risk_batch(
                 )
             )
             continue
+        if execution_context.new_entries_blocked:
+            decisions.append(
+                _decision(
+                    candidate,
+                    execution_context=execution_context,
+                    verdict=RiskVerdict.REJECT,
+                    reason_codes=("risk_off_new_entries_blocked",),
+                )
+            )
+            continue
         if candidate.regime is MarketRegime.RISK_OFF:
             decisions.append(
                 _decision(

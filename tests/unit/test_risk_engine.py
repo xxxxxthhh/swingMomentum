@@ -77,6 +77,7 @@ def execution_context(**updates: object) -> RiskExecutionContext:
         "config_hash": CONFIG_HASH,
         "entry_risk_multiplier": "1",
         "circuit_state_identity": "circuit-2024-06-14",
+        "new_entries_blocked": False,
     }
     values.update(updates)
     return RiskExecutionContext(**values)
@@ -109,13 +110,13 @@ def test_batch_reserves_cluster_budget_between_candidates(risk_config) -> None:
     assert decisions[1].reason_codes == ("risk_cluster_limit_reached",)
 
 
-def test_kill_switch_precedes_risk_off_and_open_symbol(risk_config) -> None:
+def test_kill_switch_precedes_circuit_risk_off_and_open_symbol(risk_config) -> None:
     disabled = risk_config.model_copy(update={"new_entries_enabled": False})
     decision = evaluate_risk_batch(
         [candidate("AAA", regime=MarketRegime.RISK_OFF)],
         portfolio(open_symbols=frozenset({"AAA"})),
         disabled,
-        execution_context=execution_context(),
+        execution_context=execution_context(new_entries_blocked=True),
     )[0]
     assert decision.reason_codes == ("risk_new_entries_kill_switch",)
 
@@ -128,6 +129,55 @@ def test_risk_off_precedes_open_symbol(risk_config) -> None:
         execution_context=execution_context(),
     )[0]
     assert decision.reason_codes == ("risk_off_new_entries_blocked",)
+
+
+@pytest.mark.parametrize("regime", [MarketRegime.RISK_ON, MarketRegime.NEUTRAL])
+def test_circuit_block_rejects_without_mutating_candidate_facts(regime, risk_config) -> None:
+    context = execution_context(
+        new_entries_blocked=True,
+        circuit_state_identity="circuit-daily-loss-pause",
+    )
+
+    decision = evaluate_risk_batch(
+        [candidate("AAA", regime=regime)],
+        portfolio(open_symbols=frozenset({"AAA"})),
+        risk_config,
+        execution_context=context,
+    )[0]
+
+    assert decision.verdict is RiskVerdict.REJECT
+    assert decision.reason_codes == ("risk_off_new_entries_blocked",)
+    assert decision.quantity == 0
+    assert decision.regime is regime
+    assert decision.circuit_state_identity == "circuit-daily-loss-pause"
+    assert decision.entry_risk_multiplier == Decimal("1")
+
+
+@pytest.mark.parametrize("new_entries_blocked", [None, 1, "false"])
+def test_execution_context_requires_a_strict_explicit_circuit_block_flag(
+    new_entries_blocked: object,
+) -> None:
+    values = {
+        "as_of": AS_OF,
+        "strategy_version": VERSION,
+        "config_hash": CONFIG_HASH,
+        "entry_risk_multiplier": "1",
+        "circuit_state_identity": "circuit-2024-06-14",
+        "new_entries_blocked": new_entries_blocked,
+    }
+    with pytest.raises(ValidationError, match="new_entries_blocked"):
+        RiskExecutionContext(**values)
+
+
+def test_execution_context_rejects_a_missing_circuit_block_flag() -> None:
+    with pytest.raises(ValidationError, match="new_entries_blocked"):
+        RiskExecutionContext(
+            as_of=AS_OF,
+            strategy_version=VERSION,
+            config_hash=CONFIG_HASH,
+            entry_risk_multiplier="1",
+            circuit_state_identity="circuit-2024-06-14",
+        )
 
 
 def test_neutral_uses_neutral_per_trade_budget(risk_config) -> None:

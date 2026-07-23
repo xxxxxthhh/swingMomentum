@@ -7,11 +7,23 @@ from smm.risk.artifacts import (
     write_risk_decisions_artifact,
 )
 from smm.risk.backlog import open_trigger_backlog
+from smm.risk.candidate_inputs import (
+    CandidateEvaluationInputs,
+    CandidateProvenance,
+    EvaluationFacts,
+    TriggerCandidateSource,
+    build_candidate_evaluation_inputs,
+)
 from smm.risk.engine import RiskValidationError, evaluate_risk_batch
 from smm.risk.transitions import project_risk_decisions_to_transitions
 
 __all__ = [
     "RiskValidationError",
+    "CandidateEvaluationInputs",
+    "CandidateProvenance",
+    "EvaluationFacts",
+    "TriggerCandidateSource",
+    "build_candidate_evaluation_inputs",
     "evaluate_risk_batch",
     "render_risk_decisions_artifact",
     "risk_decision_artifact_path",

@@ -93,6 +93,40 @@ scanner 新产生的 `TRIGGERED` 不得在同一日被风险消费。candidate a
 不满足时必须按已有的 fail-closed / 已冻结的生命周期语义处理，不能让 Scanner
 直接给 quantity 或用 provider-native `Bar` 代替 `PrintBar`。
 
+#### 2.1 D-anchored candidate provenance and the intentional staleness trade-off
+
+Option 1b 的 `TRIGGERED(D)` 是一个已持久化、等待消费的真实 setup，不是 X 日可被
+重新触发的占位符。因此当它在 `X>D` 被消费时，candidate 的 batch identity 仍是
+`(X, strategy_version, config_hash)`，并使用 X 的 regime、CircuitState 和组合快照；
+但它的经济与排序事实必须锚定 D：
+
+```text
+entry_reference = TradeableBar.close(D)
+SetupLow        = min(PrintBar.low[watchlist_entry : D])
+InitialStop     = SetupLow - stop.atr_buffer × ATR20(D)
+batch scores    = D 的 MomentumScore / RelativeStrengthScore
+```
+
+adapter 必须携带 D trigger、带 `(D, strategy_version, config_hash)` identity 的 D
+feature snapshot、带非空 reconstruction provenance identity 的完整且可取回
+`PrintBar[watchlist_entry:D]` session 覆盖，以及 X evaluation identity 的显式
+provenance。任何 D-side 事实缺失、不可取回、身份不一致或 provider-native `Bar`
+替代均 fail closed；不得退回 X 的价格、ATR、stop 或 scores。M5 的 entry/round-trip
+成本估计仍只可由 X identity 的 frozen M6 execution config 推导；M6 在 X+1 真正
+开盘时仍必须重新 quote 和 gate。
+
+这有意保留两项保守的 staleness 成本：(a) D 时强、但 X 时可能不再强的 setup 仍按
+D scores 获得确定性 batch priority；(b) 若消费延迟，X+1 相对 D reference 的
+gap/stop-distance re-check 很可能取消 entry。两者均不是可在 runtime 中“刷新”的
+缺陷；X-recompute 会把已持久化的 D setup 偷换成新的 X trigger，违反本 ADR 的
+Option 1b 语义。未消费 `TRIGGERED` 的生命周期 expiry policy 是独立问题，必须另行
+ADR/config 决定，不得由 candidate adapter 隐式定义。
+
+shadow 的 day-1 `PortfolioSnapshot` 同样必须作为带 X identity 的不可变外部输入；
+即使为空组合也必须显式带正 equity/cash 并通过既有 reconciliation。adapter 只验证
+该 snapshot 是否匹配 X，不决定 bootstrap 与未来 ledger-derived snapshot 的选择，
+也不写 manifest、ledger 或 transition。
+
 ### 3. 每个 session 的单 CLI 因果顺序
 
 一个 M7 `run_daily --as-of X` 必须在任何持久化前完成输入、identity、calendar、
@@ -228,3 +262,4 @@ candidate-adapter tests before it can label real symbols.
 |------|------|------|
 | 2026-07-23 | proposed | Builder 根据 Issue #39 提出 M7 编排 ADR；Task Reviewer comment `5055842914` 已接受 canonical identity/mode boundary，并建议 Option 1b；等待对本 ADR 的整体复审。 |
 | 2026-07-23 | accepted（rev.2） | Task Reviewer comment `5056348471` 对精确 HEAD `7755c7259b7da143ee849af9329eb41ace3189b4` 完成复审并接受；PR #40 已合并。 |
+| 2026-07-23 | accepted（rev.3） | Issue #56 Task Reviewer comment `5060801844` 接受 D-anchored candidate + X risk context 与外部 shadow portfolio snapshot；本修订记录可取回性 fail-closed 与刻意保留的 staleness 成本，不改变运行时 wiring。 |

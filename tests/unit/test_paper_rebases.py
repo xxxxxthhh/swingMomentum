@@ -73,6 +73,28 @@ def split_action(**updates: object) -> SplitAction:
     return SplitAction(**values)
 
 
+def unchecked_rebase_result(
+    result: PositionSplitRebase,
+    *,
+    rebased_position: OpenPaperPosition | None = None,
+    rebased_excursion: PositionExcursionState | None = None,
+) -> PositionSplitRebase:
+    """Build a wrapper solely to isolate its post-validation comparisons.
+
+    The nested position/excursion models have their own invariants. This helper
+    lets each outer record comparison be regression-tested independently.
+    """
+    return PositionSplitRebase.model_construct(
+        rebased_position=(
+            result.rebased_position if rebased_position is None else rebased_position
+        ),
+        rebased_excursion=(
+            result.rebased_excursion if rebased_excursion is None else rebased_excursion
+        ),
+        record=result.record,
+    )
+
+
 def test_split_rebase_preserves_economic_position_and_excursion_r() -> None:
     result = rebase_open_position_for_split(
         position(),
@@ -176,7 +198,33 @@ def test_split_rebase_rejects_cross_symbol_or_non_crossing_action() -> None:
         )
 
 
-def test_corporate_action_record_rejects_inconsistent_post_facts() -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("post_entry_fill", Decimal("50")),
+        ("post_initial_stop", Decimal("48")),
+        ("post_initial_unit_risk", Decimal("1.5")),
+        ("post_max_tradeable_high", Decimal("53")),
+        ("post_min_tradeable_low", Decimal("49")),
+    ],
+)
+def test_corporate_action_record_rejects_each_inconsistent_split_anchor(
+    field: str,
+    value: Decimal,
+) -> None:
+    result = rebase_open_position_for_split(
+        position(),
+        split_action(),
+        excursion_state=excursion(),
+    )
+    values = result.record.model_dump()
+    values[field] = value
+
+    with pytest.raises(ValidationError, match="post .* match split rebase"):
+        PaperPositionCorporateAction(**values)
+
+
+def test_corporate_action_record_rejects_inconsistent_post_quantity() -> None:
     result = rebase_open_position_for_split(
         position(),
         split_action(),
@@ -188,20 +236,66 @@ def test_corporate_action_record_rejects_inconsistent_post_facts() -> None:
     with pytest.raises(ValidationError, match="post quantity must match"):
         PaperPositionCorporateAction(**values)
 
-    values = result.record.model_dump()
-    values["post_max_tradeable_high"] = Decimal("53")
 
-    with pytest.raises(ValidationError, match="post max tradeable high"):
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("pre_mfe_r", Decimal("1.9"), "pre R facts"),
+        ("pre_mae_r", Decimal("-0.4"), "pre R facts"),
+        ("post_mfe_r", Decimal("1.9"), "post R facts"),
+        ("post_mae_r", Decimal("-0.4"), "post R facts"),
+    ],
+)
+def test_corporate_action_record_rejects_each_inconsistent_r_fact(
+    field: str,
+    value: Decimal,
+    match: str,
+) -> None:
+    result = rebase_open_position_for_split(
+        position(),
+        split_action(),
+        excursion_state=excursion(),
+    )
+    values = result.record.model_dump()
+    values[field] = value
+
+    with pytest.raises(ValidationError, match=match):
         PaperPositionCorporateAction(**values)
 
-    values = result.record.model_dump()
-    values["post_mfe_r"] = Decimal("1.9")
 
-    with pytest.raises(ValidationError, match="post R facts"):
-        PaperPositionCorporateAction(**values)
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("position_id", "other-position"),
+        ("symbol", "MSFT"),
+        ("strategy_version", "SMM-V9.9.9"),
+        ("config_hash", "other-config"),
+        ("quantity", 19),
+        ("entry_fill", Decimal("50")),
+        ("initial_stop", Decimal("48")),
+        ("initial_unit_risk", Decimal("1.5")),
+    ],
+)
+def test_split_rebase_result_rejects_each_position_drift_from_record(
+    field: str,
+    value: object,
+) -> None:
+    result = rebase_open_position_for_split(
+        position(),
+        split_action(),
+        excursion_state=excursion(),
+    )
+
+    candidate = unchecked_rebase_result(
+        result,
+        rebased_position=result.rebased_position.model_copy(update={field: value}),
+    )
+
+    with pytest.raises(ValueError, match="position does not match"):
+        candidate.matches_record_post_state()
 
 
-def test_split_rebase_result_rejects_position_or_excursion_drift_from_record() -> None:
+def test_split_rebase_result_constructs_with_record_contract() -> None:
     result = rebase_open_position_for_split(
         position(),
         split_action(),
@@ -214,14 +308,44 @@ def test_split_rebase_result_rejects_position_or_excursion_drift_from_record() -
             rebased_excursion=result.rebased_excursion,
             record=result.record,
         )
-    with pytest.raises(ValidationError, match="excursion does not match"):
-        PositionSplitRebase(
-            rebased_position=result.rebased_position,
-            rebased_excursion=result.rebased_excursion.model_copy(
-                update={"strategy_version": "SMM-V9.9.9"}
-            ),
-            record=result.record,
-        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("position_id", "other-position"),
+        ("symbol", "MSFT"),
+        ("opened_as_of", date(2024, 6, 17)),
+        ("strategy_version", "SMM-V9.9.9"),
+        ("config_hash", "other-config"),
+        ("entry_fill", Decimal("50")),
+        ("initial_unit_risk", Decimal("1.5")),
+        ("max_tradeable_high", Decimal("53")),
+        ("min_tradeable_low", Decimal("49")),
+        ("mfe_r", Decimal("1.9")),
+        ("mae_r", Decimal("-0.4")),
+    ],
+)
+def test_split_rebase_result_rejects_each_excursion_drift_from_record(
+    field: str,
+    value: object,
+) -> None:
+    result = rebase_open_position_for_split(
+        position(),
+        split_action(),
+        excursion_state=excursion(),
+    )
+
+    candidate = unchecked_rebase_result(
+        result,
+        rebased_excursion=result.rebased_excursion.model_copy(update={field: value}),
+    )
+
+    with pytest.raises(ValueError, match="excursion does not match"):
+        candidate.matches_record_post_state()
+
+
+def test_split_rebase_rejects_action_on_position_opening_session() -> None:
     with pytest.raises(DataValidationError, match="must follow position opening"):
         rebase_open_position_for_split(
             position(),

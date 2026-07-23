@@ -98,6 +98,31 @@ def test_unknown_ledger_column_fails_closed_instead_of_being_ignored(tmp_path) -
         read_paper_orders(tmp_path)
 
 
+def test_duplicate_stored_business_key_fails_closed(tmp_path) -> None:
+    target = append_paper_orders(tmp_path, [paper_order()])
+    stored = pq.read_table(target)
+    pq.write_table(pa.concat_tables([stored, stored]), target)
+
+    with pytest.raises(
+        DataValidationError, match="duplicate paper order business key in ledger"
+    ):
+        read_paper_orders(tmp_path)
+
+
+def test_malformed_stored_record_fails_closed(tmp_path) -> None:
+    target = append_paper_orders(tmp_path, [paper_order()])
+    stored = pq.read_table(target)
+    tampered = stored.set_column(
+        stored.schema.get_field_index("planned_quantity"),
+        "planned_quantity",
+        pa.array([-1], type=pa.int64()),
+    )
+    pq.write_table(tampered, target)
+
+    with pytest.raises(DataValidationError, match="invalid paper order ledger record"):
+        read_paper_orders(tmp_path)
+
+
 @pytest.mark.parametrize(
     ("updates", "match"),
     [

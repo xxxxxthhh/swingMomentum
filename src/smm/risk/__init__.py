@@ -6,7 +6,11 @@ from smm.risk.artifacts import (
     risk_decision_payload,
     write_risk_decisions_artifact,
 )
-from smm.risk.backlog import open_trigger_backlog
+from smm.risk.backlog import (
+    TriggerBacklogPartition,
+    open_trigger_backlog,
+    partition_trigger_backlog,
+)
 from smm.risk.candidate_inputs import (
     CandidateEvaluationInputs,
     CandidateProvenance,
@@ -30,5 +34,7 @@ __all__ = [
     "risk_decision_payload",
     "write_risk_decisions_artifact",
     "open_trigger_backlog",
+    "partition_trigger_backlog",
+    "TriggerBacklogPartition",
     "project_risk_decisions_to_transitions",
 ]

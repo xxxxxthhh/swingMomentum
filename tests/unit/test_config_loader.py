@@ -33,6 +33,7 @@ def _m6_mapping() -> dict:
             "daily_loss_pause_r": 4,
             "drawdown_reduce_at": 0.06,
             "drawdown_stop_at": 0.10,
+            "trigger_backlog_max_age_sessions": 3,
         }
     )
     return raw
@@ -71,6 +72,7 @@ def test_load_v1_1_config_freezes_m6_cost_and_circuit_values() -> None:
     assert loaded.config.risk.daily_loss_pause_r == Decimal("4")
     assert loaded.config.risk.drawdown_reduce_at == Decimal("0.06")
     assert loaded.config.risk.drawdown_stop_at == Decimal("0.10")
+    assert loaded.config.risk.trigger_backlog_max_age_sessions == 3
 
 
 def test_v1_1_m6_values_are_decimals() -> None:
@@ -102,6 +104,7 @@ def test_v1_1_mapping_accepts_the_reviewed_m6_fields() -> None:
         ("risk", "daily_loss_pause_r"),
         ("risk", "drawdown_reduce_at"),
         ("risk", "drawdown_stop_at"),
+        ("risk", "trigger_backlog_max_age_sessions"),
     ],
 )
 def test_v1_1_rejects_missing_m6_required_keys(section: str, key: str) -> None:
@@ -117,7 +120,7 @@ def test_post_v1_0_versions_reject_missing_m6_required_keys() -> None:
     raw["strategy"]["version"] = "SMM-V1.2.0"
     del raw["execution"]["half_spread_bps"]
 
-    with pytest.raises(ConfigError, match="M6 config keys"):
+    with pytest.raises(ConfigError, match="M6/M7 config keys"):
         load_config_from_mapping(raw)
 
 
@@ -131,6 +134,7 @@ def test_post_v1_0_versions_reject_missing_m6_required_keys() -> None:
         ("risk", "daily_loss_pause_r", 0, "greater than 0"),
         ("risk", "drawdown_reduce_at", 0.0, "greater than 0"),
         ("risk", "drawdown_stop_at", 1.0, "less than 1"),
+        ("risk", "trigger_backlog_max_age_sessions", 0, "greater than or equal to 1"),
     ],
 )
 def test_v1_1_rejects_illegal_m6_values(

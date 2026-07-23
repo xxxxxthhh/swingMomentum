@@ -23,6 +23,7 @@ from smm.features.engine import SymbolFeatures
 from smm.signals.lifecycle import (
     SignalTransition,
     active_transitions_by_symbol,
+    session_age,
 )
 
 _CONFIGURED_HARD_FILTERS = (
@@ -197,18 +198,6 @@ def evaluate_trigger(
     )
 
 
-def _session_age(sessions: Sequence[date], entry: date, as_of: date) -> int:
-    ordered = list(sessions)
-    if ordered != sorted(set(ordered)):
-        raise DataValidationError("scanner calendar must be sorted with unique sessions")
-    try:
-        return ordered.index(as_of) - ordered.index(entry)
-    except ValueError as exc:
-        raise DataValidationError(
-            f"scanner calendar does not contain watchlist entry {entry} and as_of {as_of}"
-        ) from exc
-
-
 def _transition(
     *,
     signal_id: str,
@@ -350,7 +339,7 @@ def scan_session(
             )
             continue
 
-        age = _session_age(sessions, latest.watchlist_entry, as_of)
+        age = session_age(sessions, latest.watchlist_entry, as_of)
         if age < 0:
             raise DataValidationError(
                 f"{symbol}: as_of {as_of} precedes watchlist entry {latest.watchlist_entry}"

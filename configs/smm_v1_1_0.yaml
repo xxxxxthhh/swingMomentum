@@ -127,6 +127,9 @@ risk:
   daily_loss_pause_r: 4
   drawdown_reduce_at: 0.06
   drawdown_stop_at: 0.10
+  # M7 data-governance guardrail: tolerate one missed run before expiry.
+  # age is provider-session distance from trigger D to evaluation X.
+  trigger_backlog_max_age_sessions: 3
 
 exit:
   fixed_profit_target: false

@@ -19,6 +19,14 @@ from smm.risk.candidate_inputs import (
     build_candidate_evaluation_inputs,
 )
 from smm.risk.engine import RiskValidationError, evaluate_risk_batch
+from smm.risk.portfolio_snapshot_artifacts import (
+    load_shadow_portfolio_snapshot,
+    portfolio_snapshot_artifact_path,
+    portfolio_snapshot_artifact_sha256,
+    portfolio_snapshot_payload,
+    render_portfolio_snapshot_artifact,
+    write_portfolio_snapshot_artifact,
+)
 from smm.risk.transitions import project_risk_decisions_to_transitions
 
 __all__ = [
@@ -37,4 +45,10 @@ __all__ = [
     "partition_trigger_backlog",
     "TriggerBacklogPartition",
     "project_risk_decisions_to_transitions",
+    "load_shadow_portfolio_snapshot",
+    "portfolio_snapshot_artifact_path",
+    "portfolio_snapshot_artifact_sha256",
+    "portfolio_snapshot_payload",
+    "render_portfolio_snapshot_artifact",
+    "write_portfolio_snapshot_artifact",
 ]

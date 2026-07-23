@@ -25,6 +25,7 @@ _SHADOW_ARTIFACT_HASHES = {
     "circuit_state": "e" * 64,
     "risk_decisions": "f" * 64,
 }
+_DEFAULT_SHADOW_ARTIFACT_HASHES = object()
 
 
 def _manifest() -> dict:
@@ -144,6 +145,18 @@ def test_shadow_manifest_rejects_missing_or_extra_artifact_keys(
         _shadow_manifest(artifact_hashes=artifact_hashes)
 
 
+@pytest.mark.parametrize(
+    "artifact_hashes",
+    [
+        None,
+        list(_SHADOW_ARTIFACT_HASHES),
+    ],
+)
+def test_shadow_manifest_rejects_non_mapping_artifact_hashes(artifact_hashes: object) -> None:
+    with pytest.raises(DataValidationError, match="must be a mapping"):
+        _shadow_manifest(artifact_hashes=artifact_hashes)
+
+
 @pytest.mark.parametrize("execution_mode", ["", "intraday", None, 1])
 def test_manifest_rejects_unknown_or_non_string_execution_mode(
     execution_mode: object,
@@ -191,7 +204,7 @@ def _shadow_artifact_hashes() -> dict[str, object]:
 
 def _shadow_manifest(
     *,
-    artifact_hashes: dict[str, object] | None = None,
+    artifact_hashes: object = _DEFAULT_SHADOW_ARTIFACT_HASHES,
     circuit_state_identity: object = "f" * 64,
 ) -> dict:
     return build_shadow_manifest(
@@ -207,6 +220,10 @@ def _shadow_manifest(
             "transition_count": 0,
             "batch_digest": "x",
         },
-        artifact_hashes=artifact_hashes or _shadow_artifact_hashes(),
+        artifact_hashes=(
+            _shadow_artifact_hashes()
+            if artifact_hashes is _DEFAULT_SHADOW_ARTIFACT_HASHES
+            else artifact_hashes
+        ),
         circuit_state_identity=circuit_state_identity,
     )

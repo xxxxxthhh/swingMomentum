@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal, localcontext
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,13 @@ from pydantic import ValidationError
 
 from smm.config.loader import load_config
 from smm.core.errors import DataValidationError
-from smm.paper.circuits import CircuitInputs, CircuitState, evaluate_circuit_state
+from smm.paper.circuits import (
+    CircuitInputs,
+    CircuitState,
+    circuit_state_identity,
+    circuit_state_payload,
+    evaluate_circuit_state,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 LOADED_CONFIG = load_config(REPO / "configs" / "smm_v1_1_0.yaml")
@@ -240,3 +247,92 @@ def test_circuit_state_rejects_block_flag_inconsistent_with_stop_reason() -> Non
 
     with pytest.raises(ValidationError, match="entry block must match circuit reasons"):
         CircuitState(**values)
+
+
+def test_circuit_state_identity_uses_the_adr_canonical_payload_and_digest() -> None:
+    state = evaluate(inputs=inputs(marked_equity=Decimal("940")))
+
+    payload = circuit_state_payload(state)
+
+    assert payload == {
+        "as_of": "2024-06-19",
+        "strategy_version": M6_CONFIG.strategy.version,
+        "config_hash": LOADED_CONFIG.config_hash,
+        "realized_loss_r_for_session": "0.000000",
+        "marked_equity": "940.000000",
+        "high_water_equity": "1000.000000",
+        "drawdown": "0.060000",
+        "new_entries_blocked": False,
+        "entry_risk_multiplier": "0.500000",
+        "reason_codes": ["circuit_drawdown_reduce_risk"],
+    }
+    expected_json = (
+        '{"as_of":"2024-06-19","config_hash":"'
+        + LOADED_CONFIG.config_hash
+        + '","drawdown":"0.060000","entry_risk_multiplier":"0.500000",'
+        '"high_water_equity":"1000.000000","marked_equity":"940.000000",'
+        '"new_entries_blocked":false,"realized_loss_r_for_session":"0.000000",'
+        '"reason_codes":["circuit_drawdown_reduce_risk"],'
+        '"strategy_version":"SMM-V1.1.0"}\n'
+    )
+
+    assert circuit_state_identity(state) == hashlib.sha256(
+        expected_json.encode("utf-8")
+    ).hexdigest()
+
+
+def test_circuit_state_identity_normalizes_decimal_encodings_but_changes_with_facts() -> None:
+    state = evaluate(inputs=inputs(marked_equity=Decimal("940")))
+    equivalent_values = state.model_dump()
+    equivalent_values["marked_equity"] = Decimal("940.000000")
+    equivalent = CircuitState(**equivalent_values)
+
+    changed_values = state.model_dump()
+    changed_values["marked_equity"] = Decimal("939.999999")
+    changed_values["drawdown"] = Decimal("0.060000001")
+    changed = CircuitState(**changed_values)
+
+    assert circuit_state_identity(equivalent) == circuit_state_identity(state)
+    assert circuit_state_identity(changed) != circuit_state_identity(state)
+
+
+def test_circuit_state_payload_uses_fixed_six_place_decimal_text() -> None:
+    state = evaluate(
+        inputs=inputs(realized_loss_r_for_session=Decimal("-0.1234567"))
+    )
+
+    assert circuit_state_payload(state)["realized_loss_r_for_session"] == "-0.123457"
+
+
+def test_circuit_state_identity_ignores_ambient_decimal_context() -> None:
+    state = evaluate(inputs=inputs(marked_equity=Decimal("940")))
+    expected = circuit_state_identity(state)
+
+    with localcontext() as context:
+        context.prec = 6
+        context.rounding = ROUND_DOWN
+        assert circuit_state_identity(state) == expected
+
+
+def test_circuit_state_payload_preserves_frozen_reason_code_priority() -> None:
+    state = evaluate(
+        inputs=inputs(
+            realized_loss_r_for_session=Decimal("-5"),
+            marked_equity=Decimal("900"),
+            integrity_halt=True,
+        )
+    )
+
+    assert circuit_state_payload(state)["reason_codes"] == [
+        "circuit_data_or_position_integrity_halt",
+        "circuit_drawdown_stop_new_entries",
+        "circuit_daily_loss_pause",
+    ]
+
+
+def test_circuit_state_identity_rejects_non_circuit_state_input() -> None:
+    with pytest.raises(DataValidationError, match="CircuitState"):
+        circuit_state_payload(None)
+
+    with pytest.raises(DataValidationError, match="CircuitState"):
+        circuit_state_identity(None)

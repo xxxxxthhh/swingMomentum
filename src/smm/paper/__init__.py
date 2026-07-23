@@ -13,6 +13,11 @@ from smm.paper.exits import (
     assess_close_exit,
 )
 from smm.paper.prints import SplitAction, SplitActionHistory, rebuild_print_bars
+from smm.paper.rebases import (
+    PaperPositionCorporateAction,
+    PositionSplitRebase,
+    rebase_open_position_for_split,
+)
 from smm.paper.stops import (
     OpenPaperPosition,
     StopAssessmentStatus,
@@ -29,7 +34,9 @@ __all__ = [
     "EntryStatus",
     "ExecutionQuote",
     "OpenPaperPosition",
+    "PaperPositionCorporateAction",
     "PositionExcursionState",
+    "PositionSplitRebase",
     "SplitAction",
     "SplitActionHistory",
     "StopAssessmentStatus",
@@ -39,6 +46,7 @@ __all__ = [
     "assess_long_stop",
     "evaluate_circuit_state",
     "quote_next_open",
+    "rebase_open_position_for_split",
     "rebuild_print_bars",
     "update_position_excursion",
 ]

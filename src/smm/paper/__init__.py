@@ -12,6 +12,14 @@ from smm.paper.exits import (
     CloseExitStatus,
     assess_close_exit,
 )
+from smm.paper.orders import (
+    PaperOrder,
+    PaperOrderPurpose,
+    PaperOrderStatus,
+    append_paper_orders,
+    paper_order_path,
+    read_paper_orders,
+)
 from smm.paper.prints import SplitAction, SplitActionHistory, rebuild_print_bars
 from smm.paper.rebases import (
     PaperPositionCorporateAction,
@@ -34,6 +42,9 @@ __all__ = [
     "EntryStatus",
     "ExecutionQuote",
     "OpenPaperPosition",
+    "PaperOrder",
+    "PaperOrderPurpose",
+    "PaperOrderStatus",
     "PaperPositionCorporateAction",
     "PositionExcursionState",
     "PositionSplitRebase",
@@ -44,8 +55,11 @@ __all__ = [
     "assess_close_exit",
     "assess_next_open_entry",
     "assess_long_stop",
+    "append_paper_orders",
     "evaluate_circuit_state",
     "quote_next_open",
+    "paper_order_path",
+    "read_paper_orders",
     "rebase_open_position_for_split",
     "rebuild_print_bars",
     "update_position_excursion",

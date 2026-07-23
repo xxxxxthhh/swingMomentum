@@ -3,14 +3,14 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | accepted（rev.5；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受；Issue #57 定义 backlog expiry guardrail；Issue #60 定义 shadow snapshot audit basis） |
+| 状态 | accepted（rev.6；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受；Issue #57 定义 backlog expiry guardrail；Issue #60 定义 shadow snapshot audit basis；Issue #62 定义 strict shadow manifest assembly） |
 | 日期 | 2026-07-23 |
 | 策略版本 | 不 bump；Issue #57 的数据治理护栏改变 `config_hash`，不改变 strategy identity |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§12.1、§26、§35、§53） |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)（M7 / PR8） |
 | 前置决策 | [M3](./2026-07-22_m3_watchlist_and_signal_lifecycle.md)、[M4](./2026-07-22_m4_signal_report_and_daily_task.md)、[M5](./2026-07-22_m5_risk_engine_and_planned_sizing.md)、[M6](./2026-07-22_m6_paper_broker_contract.md) |
 | 讨论依据 | [Issue #39](https://github.com/xxxxxthhh/swingMomentum/issues/39)；Task Reviewer comment `5055842914` |
-| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、其有界 expiry guardrail、CircuitState digest、shadow snapshot audit basis，以及 mode-aware manifest 的不可覆盖重放规则；不实现完整 runtime wiring。 |
+| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、其有界 expiry guardrail、CircuitState digest、shadow snapshot audit basis、strict shadow manifest assembly，以及 mode-aware manifest 的不可覆盖重放规则；不实现完整 runtime wiring。 |
 
 ---
 
@@ -276,6 +276,24 @@ Every artifact named by a manifest must be finalized and hash-verified before
 the manifest is atomically written. Files not named in that session's manifest
 are not a successful M7 output, even if a ledger append exists elsewhere.
 
+#### 5.1 Strict pure shadow manifest assembly
+
+Issue #62 Task Reviewer comment `5062413569` freezes a dedicated, pure
+`build_shadow_manifest` seam before any runtime wiring. It fixes
+`execution_mode` internally to `shadow` and preserves the existing
+byte-compatible `build_manifest` path for `mvp_a_signal` without introducing
+mode-conditional branches there.
+
+The shadow helper requires exactly these six named artifact hashes:
+`report_csv`, `report_markdown`, `features_snapshot`, `portfolio_snapshot`,
+`circuit_state`, and `risk_decisions`. The latter is required even for an
+empty eligible-candidate batch and therefore binds the canonical empty
+RiskDecision artifact instead of changing manifest shape. Each named hash and
+the separate `circuit_state_identity` must be non-empty, lowercase 64-hex
+SHA-256 values. The helper accepts only the precomputed scalar identity; it
+does not import, construct, or recompute CircuitState. It reuses the existing
+`reproduction_contract` shape and neither reads paths nor writes files.
+
 ### 6. Risk-cluster taxonomy remains a separate, fail-closed follow-up
 
 This ADR deliberately does not add a manual cluster map. Existing M5 behavior
@@ -333,3 +351,4 @@ candidate-adapter tests before it can label real symbols.
 | 2026-07-23 | accepted（rev.3） | Issue #56 Task Reviewer comment `5060801844` 接受 D-anchored candidate + X risk context 与外部 shadow portfolio snapshot；本修订记录可取回性 fail-closed 与刻意保留的 staleness 成本，不改变运行时 wiring。 |
 | 2026-07-23 | accepted（rev.4） | Issue #57 Task Reviewer comment `5061360150` 决定 required `risk.trigger_backlog_max_age_sessions=3` 与 `age >= N` expiry。它是仅改变 `config_hash` 的数据治理护栏；共享 provider-session helper，先 partition 再 risk，过期 reason 固定为 `trigger_backlog_expired`。 |
 | 2026-07-23 | accepted（rev.5） | Issue #60 Task Reviewer comment `5061866645` 接受 shadow external `PortfolioSnapshot` 的 canonical artifact/hash、normalized-byte idempotency 与 shadow-only preflight 边界；不启用 Risk、transition、ledger 或 paper runtime。 |
+| 2026-07-23 | accepted（rev.6） | Issue #62 Task Reviewer comment `5062413569` 接受专用 pure shadow manifest helper、固定六类 artifact（含空 risk batch）及全部 artifact/circuit identity 的严格 lowercase SHA-256 绑定；不启用 runtime wiring。 |

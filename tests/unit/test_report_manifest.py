@@ -12,10 +12,20 @@ from smm.report.manifest import (
     CONDITIONALLY_EXCLUDED_FIELDS,
     ExecutionMode,
     build_manifest,
+    build_shadow_manifest,
     render_manifest,
 )
 
 _FORBIDDEN_KEY_SUBSTRINGS = ("wall_clock", "timestamp", "run_id", "tmp", "temp")
+_SHADOW_ARTIFACT_HASHES = {
+    "report_csv": "a" * 64,
+    "report_markdown": "b" * 64,
+    "features_snapshot": "c" * 64,
+    "portfolio_snapshot": "d" * 64,
+    "circuit_state": "e" * 64,
+    "risk_decisions": "f" * 64,
+}
+_DEFAULT_SHADOW_ARTIFACT_HASHES = object()
 
 
 def _manifest() -> dict:
@@ -79,6 +89,74 @@ def test_manifest_renders_each_accepted_execution_mode(
     assert _manifest_with_mode(execution_mode)["execution_mode"] == expected
 
 
+def test_shadow_manifest_requires_all_canonical_artifacts_and_identity() -> None:
+    manifest = _shadow_manifest()
+
+    assert manifest["execution_mode"] == "shadow"
+    assert manifest["artifacts"] == _shadow_artifact_hashes()
+    assert manifest["circuit_state_identity"] == "f" * 64
+    assert manifest["reproduction_contract"] == {
+        "conditionally_excluded_fields": list(CONDITIONALLY_EXCLUDED_FIELDS),
+    }
+
+
+@pytest.mark.parametrize(
+    ("artifact_key", "invalid_hash"),
+    [
+        ("report_csv", ""),
+        ("report_markdown", "A" * 64),
+        ("features_snapshot", "a" * 63),
+        ("portfolio_snapshot", "g" * 64),
+        ("circuit_state", None),
+        ("risk_decisions", 1),
+    ],
+)
+def test_shadow_manifest_rejects_invalid_hash_for_every_artifact(
+    artifact_key: str, invalid_hash: object
+) -> None:
+    artifact_hashes = _shadow_artifact_hashes()
+    artifact_hashes[artifact_key] = invalid_hash
+
+    with pytest.raises(DataValidationError, match=f"artifact hash for {artifact_key}"):
+        _shadow_manifest(artifact_hashes=artifact_hashes)
+
+
+@pytest.mark.parametrize("identity", ["", "F" * 64, "f" * 63, None, 1])
+def test_shadow_manifest_rejects_invalid_circuit_state_identity(identity: object) -> None:
+    with pytest.raises(DataValidationError, match="circuit_state_identity"):
+        _shadow_manifest(circuit_state_identity=identity)
+
+
+@pytest.mark.parametrize(
+    "artifact_hashes",
+    [
+        {
+            key: value
+            for key, value in _SHADOW_ARTIFACT_HASHES.items()
+            if key != "risk_decisions"
+        },
+        {**_SHADOW_ARTIFACT_HASHES, "extra": "e" * 64},
+    ],
+)
+def test_shadow_manifest_rejects_missing_or_extra_artifact_keys(
+    artifact_hashes: dict[str, object],
+) -> None:
+    with pytest.raises(DataValidationError, match="shadow manifest artifact keys"):
+        _shadow_manifest(artifact_hashes=artifact_hashes)
+
+
+@pytest.mark.parametrize(
+    "artifact_hashes",
+    [
+        None,
+        list(_SHADOW_ARTIFACT_HASHES),
+    ],
+)
+def test_shadow_manifest_rejects_non_mapping_artifact_hashes(artifact_hashes: object) -> None:
+    with pytest.raises(DataValidationError, match="must be a mapping"):
+        _shadow_manifest(artifact_hashes=artifact_hashes)
+
+
 @pytest.mark.parametrize("execution_mode", ["", "intraday", None, 1])
 def test_manifest_rejects_unknown_or_non_string_execution_mode(
     execution_mode: object,
@@ -117,4 +195,35 @@ def _manifest_with_mode(execution_mode: object) -> dict:
         transition_batch={"as_of": "2024-06-10", "transition_count": 0, "batch_digest": "x"},
         artifact_hashes={"report_csv": "aaa", "report_markdown": "bbb"},
         execution_mode=execution_mode,
+    )
+
+
+def _shadow_artifact_hashes() -> dict[str, object]:
+    return dict(_SHADOW_ARTIFACT_HASHES)
+
+
+def _shadow_manifest(
+    *,
+    artifact_hashes: object = _DEFAULT_SHADOW_ARTIFACT_HASHES,
+    circuit_state_identity: object = "f" * 64,
+) -> dict:
+    return build_shadow_manifest(
+        as_of=date(2024, 6, 10),
+        strategy_version="SMM-V1.0.0",
+        config_hash="abc123",
+        regime=MarketRegime.RISK_ON,
+        provider_source="synthetic",
+        universe_snapshot_id="2024-06-10_sp500_ndx",
+        git_commit="deadbeef",
+        transition_batch={
+            "as_of": "2024-06-10",
+            "transition_count": 0,
+            "batch_digest": "x",
+        },
+        artifact_hashes=(
+            _shadow_artifact_hashes()
+            if artifact_hashes is _DEFAULT_SHADOW_ARTIFACT_HASHES
+            else artifact_hashes
+        ),
+        circuit_state_identity=circuit_state_identity,
     )

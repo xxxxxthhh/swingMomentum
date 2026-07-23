@@ -164,6 +164,14 @@ def test_partition_rejects_non_positive_age_limit() -> None:
         partition(trigger, max_age_sessions=0)
 
 
+@pytest.mark.parametrize("max_age_sessions", [True, 3.0, "3"])
+def test_partition_rejects_non_integer_age_limit(max_age_sessions: object) -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 18))
+
+    with pytest.raises(DataValidationError, match="max_age_sessions must be a positive integer"):
+        partition(trigger, max_age_sessions=max_age_sessions)  # type: ignore[arg-type]
+
+
 def test_partition_fails_closed_for_non_canonical_provider_calendar() -> None:
     trigger = transition("AAA", as_of=date(2024, 6, 18))
 

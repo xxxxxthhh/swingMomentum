@@ -90,10 +90,6 @@ def partition_trigger_backlog(
     expirations: list[SignalTransition] = []
     for trigger in open_triggers:
         age = session_age(sessions, trigger.as_of, evaluation_as_of)
-        if age < 0:
-            raise DataValidationError(
-                f"trigger {trigger.signal_id} follows evaluation_as_of {evaluation_as_of}"
-            )
         if age < max_age_sessions:
             eligible.append(trigger)
             continue

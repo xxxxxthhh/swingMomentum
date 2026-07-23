@@ -7,7 +7,14 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 from smm.core.errors import StateTransitionError
 from smm.domain.enums import (
@@ -305,6 +312,7 @@ class RiskExecutionContext(BaseModel):
     config_hash: str
     entry_risk_multiplier: Decimal = Field(ge=0, le=1)
     circuit_state_identity: str
+    new_entries_blocked: StrictBool
 
     @field_validator("strategy_version", "config_hash", "circuit_state_identity")
     @classmethod

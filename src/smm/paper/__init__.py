@@ -6,9 +6,12 @@ This package deliberately does not contain task orchestration or broker I/O.
 from smm.paper.circuits import (
     CircuitInputs,
     CircuitState,
+    circuit_state_artifact_path,
     circuit_state_identity,
     circuit_state_payload,
     evaluate_circuit_state,
+    render_circuit_state_artifact,
+    write_circuit_state_artifact,
 )
 from smm.paper.costs import ExecutionQuote, quote_next_open
 from smm.paper.entries import EntryAssessment, EntryStatus, assess_next_open_entry
@@ -74,6 +77,7 @@ __all__ = [
     "assess_long_stop",
     "append_manual_skips",
     "append_paper_orders",
+    "circuit_state_artifact_path",
     "circuit_state_identity",
     "circuit_state_payload",
     "evaluate_circuit_state",
@@ -84,5 +88,7 @@ __all__ = [
     "read_paper_orders",
     "rebase_open_position_for_split",
     "rebuild_print_bars",
+    "render_circuit_state_artifact",
     "update_position_excursion",
+    "write_circuit_state_artifact",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import date
 from decimal import ROUND_DOWN, Decimal, localcontext
 from pathlib import Path
@@ -15,9 +16,12 @@ from smm.core.errors import DataValidationError
 from smm.paper.circuits import (
     CircuitInputs,
     CircuitState,
+    circuit_state_artifact_path,
     circuit_state_identity,
     circuit_state_payload,
     evaluate_circuit_state,
+    render_circuit_state_artifact,
+    write_circuit_state_artifact,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -336,3 +340,53 @@ def test_circuit_state_identity_rejects_non_circuit_state_input() -> None:
 
     with pytest.raises(DataValidationError, match="CircuitState"):
         circuit_state_identity(None)
+
+
+def test_circuit_state_artifact_is_canonical_and_idempotent(tmp_path: Path) -> None:
+    state = evaluate(inputs=inputs(marked_equity=Decimal("940")))
+
+    target = write_circuit_state_artifact(tmp_path, state)
+
+    assert target == circuit_state_artifact_path(tmp_path, AS_OF)
+    assert target == tmp_path / "2024-06-19" / "circuit_state.json"
+    text = target.read_text(encoding="utf-8")
+    assert text == render_circuit_state_artifact(state)
+    assert text.endswith("\n")
+    artifact = json.loads(text)
+    assert artifact["circuit_state_identity"] == circuit_state_identity(state)
+    assert {
+        key: value for key, value in artifact.items() if key != "circuit_state_identity"
+    } == circuit_state_payload(state)
+
+    before = target.read_bytes()
+    (target.parent / "manifest.json").write_text("{}\n", encoding="utf-8")
+    assert write_circuit_state_artifact(tmp_path, state) == target
+    assert target.read_bytes() == before
+
+
+def test_circuit_state_artifact_conflict_does_not_overwrite_existing_file(
+    tmp_path: Path,
+) -> None:
+    original = evaluate(inputs=inputs(marked_equity=Decimal("940")))
+    target = write_circuit_state_artifact(tmp_path, original)
+    before = target.read_bytes()
+    changed = evaluate(inputs=inputs(marked_equity=Decimal("930")))
+
+    with pytest.raises(DataValidationError, match="conflicting circuit state artifact"):
+        write_circuit_state_artifact(tmp_path, changed)
+
+    assert target.read_bytes() == before
+
+
+def test_circuit_state_artifact_cannot_be_added_to_completed_session(
+    tmp_path: Path,
+) -> None:
+    state = evaluate()
+    day_dir = tmp_path / AS_OF.isoformat()
+    day_dir.mkdir()
+    (day_dir / "manifest.json").write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(DataValidationError, match="cannot add CircuitState artifact"):
+        write_circuit_state_artifact(tmp_path, state)
+
+    assert not circuit_state_artifact_path(tmp_path, AS_OF).exists()

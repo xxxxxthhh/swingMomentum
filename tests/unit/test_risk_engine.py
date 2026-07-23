@@ -10,7 +10,12 @@ from pydantic import ValidationError
 
 from smm.config.loader import load_config
 from smm.domain.enums import MarketRegime, RiskVerdict
-from smm.domain.models import Bar, EligibleCandidate, PortfolioSnapshot
+from smm.domain.models import (
+    Bar,
+    EligibleCandidate,
+    PortfolioSnapshot,
+    RiskExecutionContext,
+)
 from smm.risk.engine import RiskValidationError, evaluate_risk_batch
 
 AS_OF = date(2024, 6, 14)
@@ -65,6 +70,18 @@ def portfolio(**updates: object) -> PortfolioSnapshot:
     return PortfolioSnapshot(**values)
 
 
+def execution_context(**updates: object) -> RiskExecutionContext:
+    values: dict[str, object] = {
+        "as_of": AS_OF,
+        "strategy_version": VERSION,
+        "config_hash": CONFIG_HASH,
+        "entry_risk_multiplier": "1",
+        "circuit_state_identity": "circuit-2024-06-14",
+    }
+    values.update(updates)
+    return RiskExecutionContext(**values)
+
+
 @pytest.fixture
 def risk_config():
     return load_config().config.risk
@@ -78,7 +95,10 @@ def test_batch_reserves_cluster_budget_between_candidates(risk_config) -> None:
     )
 
     decisions = evaluate_risk_batch(
-        [candidate("BBB"), candidate("AAA")], snapshot, risk_config
+        [candidate("BBB"), candidate("AAA")],
+        snapshot,
+        risk_config,
+        execution_context=execution_context(),
     )
 
     assert [decision.symbol for decision in decisions] == ["AAA", "BBB"]
@@ -95,6 +115,7 @@ def test_kill_switch_precedes_risk_off_and_open_symbol(risk_config) -> None:
         [candidate("AAA", regime=MarketRegime.RISK_OFF)],
         portfolio(open_symbols=frozenset({"AAA"})),
         disabled,
+        execution_context=execution_context(),
     )[0]
     assert decision.reason_codes == ("risk_new_entries_kill_switch",)
 
@@ -104,17 +125,68 @@ def test_risk_off_precedes_open_symbol(risk_config) -> None:
         [candidate("AAA", regime=MarketRegime.RISK_OFF)],
         portfolio(open_symbols=frozenset({"AAA"})),
         risk_config,
+        execution_context=execution_context(),
     )[0]
     assert decision.reason_codes == ("risk_off_new_entries_blocked",)
 
 
 def test_neutral_uses_neutral_per_trade_budget(risk_config) -> None:
     decision = evaluate_risk_batch(
-        [candidate("AAA", regime=MarketRegime.NEUTRAL)], portfolio(), risk_config
+        [candidate("AAA", regime=MarketRegime.NEUTRAL)],
+        portfolio(),
+        risk_config,
+        execution_context=execution_context(),
     )[0]
     assert decision.verdict is RiskVerdict.ACCEPT
     assert decision.quantity == 22
     assert decision.reason_codes == ("risk_sized_by_per_trade",)
+
+
+def test_execution_context_scales_risk_and_is_audited(risk_config) -> None:
+    context = execution_context(
+        entry_risk_multiplier="0.5",
+        circuit_state_identity="circuit-drawdown-reduce",
+    )
+
+    decision = evaluate_risk_batch(
+        [candidate("AAA")],
+        portfolio(),
+        risk_config,
+        execution_context=context,
+    )[0]
+
+    assert decision.quantity == 22
+    assert decision.entry_risk_multiplier == Decimal("0.5")
+    assert decision.circuit_state_identity == "circuit-drawdown-reduce"
+
+
+def test_execution_context_identity_mismatch_fails_closed(risk_config) -> None:
+    with pytest.raises(RiskValidationError, match="execution context identity mismatch"):
+        evaluate_risk_batch(
+            [candidate("AAA")],
+            portfolio(),
+            risk_config,
+            execution_context=execution_context(config_hash="b" * 64),
+        )
+
+
+def test_zero_execution_multiplier_cannot_produce_an_accepted_plan(risk_config) -> None:
+    context = execution_context(
+        entry_risk_multiplier="0",
+        circuit_state_identity="circuit-drawdown-stop",
+    )
+
+    decision = evaluate_risk_batch(
+        [candidate("AAA")],
+        portfolio(),
+        risk_config,
+        execution_context=context,
+    )[0]
+
+    assert decision.verdict is RiskVerdict.REJECT
+    assert decision.reason_codes == ("risk_per_trade_budget_exhausted",)
+    assert decision.entry_risk_multiplier == Decimal("0")
+    assert decision.circuit_state_identity == "circuit-drawdown-stop"
 
 
 @pytest.mark.parametrize(
@@ -147,7 +219,12 @@ def test_neutral_uses_neutral_per_trade_budget(risk_config) -> None:
     ],
 )
 def test_risk_budget_at_limit_rejects_one_share(snapshot, reason, risk_config) -> None:
-    decision = evaluate_risk_batch([candidate("AAA")], snapshot, risk_config)[0]
+    decision = evaluate_risk_batch(
+        [candidate("AAA")],
+        snapshot,
+        risk_config,
+        execution_context=execution_context(),
+    )[0]
     assert decision.verdict is RiskVerdict.REJECT
     assert reason in decision.reason_codes
     assert decision.quantity == 0
@@ -161,7 +238,12 @@ def test_all_zero_capacity_reasons_are_stable_and_ordered(risk_config) -> None:
         sector_initial_risk={"information_technology": "4000"},
         cluster_initial_risk={"growth": "4000"},
     )
-    decision = evaluate_risk_batch([candidate("AAA")], snapshot, risk_config)[0]
+    decision = evaluate_risk_batch(
+        [candidate("AAA")],
+        snapshot,
+        risk_config,
+        execution_context=execution_context(),
+    )[0]
     assert decision.reason_codes == (
         "risk_cash_exhausted",
         "risk_exposure_limit_reached",
@@ -181,6 +263,7 @@ def test_unclassified_candidates_share_one_budget(risk_config) -> None:
         [candidate("AAA", risk_cluster=None), candidate("BBB", risk_cluster="")],
         snapshot,
         risk_config,
+        execution_context=execution_context(),
     )
     assert [decision.risk_cluster for decision in decisions] == [
         "unclassified",
@@ -198,8 +281,18 @@ def test_reordered_candidates_produce_identical_decision_bytes(risk_config) -> N
         candidate("AAA", momentum_score=90, relative_strength_score=70),
         candidate("BBB", momentum_score=90, relative_strength_score=80),
     ]
-    forward = evaluate_risk_batch(candidates, portfolio(), risk_config)
-    reverse = evaluate_risk_batch(list(reversed(candidates)), portfolio(), risk_config)
+    forward = evaluate_risk_batch(
+        candidates,
+        portfolio(),
+        risk_config,
+        execution_context=execution_context(),
+    )
+    reverse = evaluate_risk_batch(
+        list(reversed(candidates)),
+        portfolio(),
+        risk_config,
+        execution_context=execution_context(),
+    )
     assert [decision.model_dump_json() for decision in forward] == [
         decision.model_dump_json() for decision in reverse
     ]
@@ -215,13 +308,21 @@ def test_reordered_candidates_produce_identical_decision_bytes(risk_config) -> N
 )
 def test_duplicate_batch_identity_fails_closed(candidates, risk_config) -> None:
     with pytest.raises(RiskValidationError, match="duplicate"):
-        evaluate_risk_batch(candidates, portfolio(), risk_config)
+        evaluate_risk_batch(
+            candidates,
+            portfolio(),
+            risk_config,
+            execution_context=execution_context(),
+        )
 
 
 def test_identity_mismatch_fails_closed(risk_config) -> None:
     with pytest.raises(RiskValidationError, match="identity"):
         evaluate_risk_batch(
-            [candidate("AAA", config_hash="b" * 64)], portfolio(), risk_config
+            [candidate("AAA", config_hash="b" * 64)],
+            portfolio(),
+            risk_config,
+            execution_context=execution_context(),
         )
 
 

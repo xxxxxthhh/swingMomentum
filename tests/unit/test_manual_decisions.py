@@ -29,6 +29,8 @@ def risk_decision(**updates: object) -> RiskDecision:
         "as_of": date(2024, 6, 18),
         "strategy_version": "SMM-V1.1.0",
         "config_hash": "frozen-config-hash",
+        "entry_risk_multiplier": Decimal("1"),
+        "circuit_state_identity": "circuit-2024-06-18",
         "verdict": RiskVerdict.ACCEPT,
         "reason_codes": ("risk_sized_by_per_trade",),
         "quantity": 10,

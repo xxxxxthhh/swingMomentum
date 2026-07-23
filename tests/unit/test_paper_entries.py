@@ -30,6 +30,8 @@ def risk_decision(**updates: object) -> RiskDecision:
         "as_of": SIGNAL_AS_OF,
         "strategy_version": M6_CONFIG.strategy.version,
         "config_hash": LOADED_CONFIG.config_hash,
+        "entry_risk_multiplier": Decimal("1"),
+        "circuit_state_identity": "circuit-2024-06-17",
         "verdict": RiskVerdict.ACCEPT,
         "reason_codes": ("risk_sized_by_per_trade",),
         "quantity": 10,

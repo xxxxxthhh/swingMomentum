@@ -266,3 +266,101 @@ def test_rejects_non_triggered_source_and_never_retriggers_at_x() -> None:
 
     with pytest.raises(DataValidationError, match="must be TRIGGERED"):
         build(sources=(source(transition=non_triggered),))
+
+
+def test_rejects_same_day_trigger_instead_of_retriggering_at_x() -> None:
+    same_day = transition().model_copy(update={"as_of": EVALUATION_AS_OF})
+
+    with pytest.raises(DataValidationError, match="must follow trigger as_of"):
+        build(
+            sources=(
+                source(
+                    transition=same_day,
+                    sessions=(WATCHLIST_ENTRY, date(2024, 6, 18), EVALUATION_AS_OF),
+                    print_bars=(
+                        print_bar(WATCHLIST_ENTRY, low=98.0, close=100.0),
+                        print_bar(date(2024, 6, 18), low=96.0, close=102.0),
+                        print_bar(EVALUATION_AS_OF, low=97.0, close=105.0),
+                    ),
+                    trigger_features=feature(as_of=EVALUATION_AS_OF),
+                ),
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("sessions", "print_bars"),
+    [
+        (
+            (date(2024, 6, 18), TRIGGER_AS_OF),
+            (
+                print_bar(date(2024, 6, 18), low=96.0, close=102.0),
+                print_bar(TRIGGER_AS_OF, low=97.0, close=105.0),
+            ),
+        ),
+        (
+            (WATCHLIST_ENTRY, date(2024, 6, 18)),
+            (
+                print_bar(WATCHLIST_ENTRY, low=98.0, close=100.0),
+                print_bar(date(2024, 6, 18), low=96.0, close=102.0),
+            ),
+        ),
+    ],
+)
+def test_rejects_print_session_window_that_does_not_span_watchlist_through_d(
+    sessions: tuple[date, ...],
+    print_bars: tuple[PrintBar, ...],
+) -> None:
+    with pytest.raises(DataValidationError, match="cover watchlist entry through trigger"):
+        build(sources=(source(sessions=sessions, print_bars=print_bars),))
+
+
+def test_rejects_d_anchored_stop_outside_frozen_atr_distance_band() -> None:
+    with pytest.raises(DataValidationError, match="outside frozen ATR bounds"):
+        build(
+            sources=(
+                source(
+                    print_bars=(
+                        print_bar(WATCHLIST_ENTRY, low=98.0, close=100.0),
+                        print_bar(date(2024, 6, 18), low=90.0, close=102.0),
+                        print_bar(TRIGGER_AS_OF, low=97.0, close=105.0),
+                    )
+                ),
+            )
+        )
+
+
+def test_rejects_d_anchored_stop_that_is_not_positive() -> None:
+    impossible_stop = CONFIG.stop.model_copy(update={"atr_buffer": 100.0})
+
+    with pytest.raises(DataValidationError, match="does not yield a positive stop"):
+        build(stop=impossible_stop)
+
+
+@pytest.mark.parametrize(
+    ("entry_cost", "total_cost"),
+    [
+        (Decimal("0"), Decimal("0.1")),
+        (Decimal("0.1"), Decimal("0.09")),
+    ],
+)
+def test_rejects_incomplete_or_non_positive_cost_estimate(
+    entry_cost: Decimal,
+    total_cost: Decimal,
+) -> None:
+    from smm.risk import candidate_inputs
+
+    with pytest.raises(DataValidationError, match="positive and complete"):
+        candidate_inputs._validate_cost_estimate(
+            entry_cost=entry_cost,
+            total_cost=total_cost,
+        )
+
+
+def test_rejects_internally_inconsistent_frozen_stop_distance_config() -> None:
+    inconsistent_stop = CONFIG.stop.model_copy(
+        update={"min_stop_distance_atr": 3.0, "max_stop_distance_atr": 2.5}
+    )
+
+    with pytest.raises(DataValidationError, match="min_stop_distance_atr"):
+        build(stop=inconsistent_stop)

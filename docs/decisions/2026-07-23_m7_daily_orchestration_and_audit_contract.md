@@ -115,6 +115,16 @@ provenance。任何 D-side 事实缺失、不可取回、身份不一致或 prov
 成本估计仍只可由 X identity 的 frozen M6 execution config 推导；M6 在 X+1 真正
 开盘时仍必须重新 quote 和 gate。
 
+这里的 D feature snapshot 指历史上在 D 实际冻结的 feature/score 输入，而不是在 X
+或之后从可变的 adjusted provider series 重算的近似值。特别是，true-print 的
+`entry_reference` / `SetupLow` 与 adjusted-feature `ATR20(D)` 必须保留同一 D 日
+输入尺度及可重放 provenance；公司行为之后 provider 的 adjusted factor 可能改变
+历史 Bar 的表达，不能据此重新计算 backlog 的 ATR 或 scores。当前纯 adapter 只能
+验证已提供的 `SymbolFeatures.as_of`、symbol、strategy/config identity 与
+PrintBar provenance；`ScoredSymbol` 本身没有 `as_of`，因此未来 runtime-storage
+读取路径必须显式取得不可变的 D feature snapshot，并不得把该 retrievability 责任
+交给 adapter 猜测或用 X 事实补齐。
+
 这有意保留两项保守的 staleness 成本：(a) D 时强、但 X 时可能不再强的 setup 仍按
 D scores 获得确定性 batch priority；(b) 若消费延迟，X+1 相对 D reference 的
 gap/stop-distance re-check 很可能取消 entry。两者均不是可在 runtime 中“刷新”的

@@ -328,6 +328,14 @@ def _estimated_costs(
     entry_cost = entry_reference * (half_spread + entry_slippage) / _BPS_DENOMINATOR + commission
     exit_cost = stop_reference * (half_spread + exit_slippage) / _BPS_DENOMINATOR + commission
     total_cost = entry_cost + exit_cost
+    return _validate_cost_estimate(entry_cost=entry_cost, total_cost=total_cost)
+
+
+def _validate_cost_estimate(
+    *,
+    entry_cost: Decimal,
+    total_cost: Decimal,
+) -> tuple[Decimal, Decimal]:
     if entry_cost <= _ZERO or total_cost < entry_cost:
         raise DataValidationError("M6 cost estimate must be positive and complete")
     return entry_cost, total_cost

@@ -150,3 +150,20 @@ def test_batch_rejects_a_decision_from_another_session(tmp_path: Path) -> None:
 
     with pytest.raises(DataValidationError, match="as_of must match artifact session"):
         write_risk_decisions_artifact(tmp_path, AS_OF, (later,))
+
+
+def test_render_rejects_duplicate_signal_ids_within_one_batch() -> None:
+    duplicate = decision(symbol="BBB")
+
+    with pytest.raises(DataValidationError, match="cannot repeat signal_id"):
+        render_risk_decisions_artifact((decision(), duplicate))
+
+
+def test_render_rejects_mixed_circuit_state_identity_within_one_batch() -> None:
+    different_circuit = decision(
+        signal_id="signal-002",
+        circuit_state_identity="c" * 64,
+    )
+
+    with pytest.raises(DataValidationError, match="batch identity mismatch"):
+        render_risk_decisions_artifact((decision(), different_circuit))

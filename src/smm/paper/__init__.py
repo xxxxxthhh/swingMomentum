@@ -11,6 +11,7 @@ from smm.paper.circuits import (
     circuit_state_payload,
     evaluate_circuit_state,
     render_circuit_state_artifact,
+    risk_execution_context_for,
     write_circuit_state_artifact,
 )
 from smm.paper.costs import ExecutionQuote, quote_next_open
@@ -89,6 +90,7 @@ __all__ = [
     "rebase_open_position_for_split",
     "rebuild_print_bars",
     "render_circuit_state_artifact",
+    "risk_execution_context_for",
     "update_position_excursion",
     "write_circuit_state_artifact",
 ]

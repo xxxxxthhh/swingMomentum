@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, 
 
 from smm.config.schema import RiskSection
 from smm.core.errors import DataValidationError
+from smm.domain.models import RiskExecutionContext
 from smm.report.format import dump_json_deterministic, format_decimal
 
 _ZERO = Decimal(0)
@@ -258,6 +259,24 @@ def circuit_state_identity(state: CircuitState) -> str:
     """Return the SHA-256 identity of M7's canonical CircuitState payload."""
     payload_text = dump_json_deterministic(circuit_state_payload(state))
     return hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+
+
+def risk_execution_context_for(state: CircuitState) -> RiskExecutionContext:
+    """Project one canonical CircuitState into M7's immutable risk input.
+
+    This pure seam permits no caller overrides, so every mapped fact and the
+    canonical digest remain bound to the same validated CircuitState.
+    """
+    if not isinstance(state, CircuitState):
+        raise DataValidationError("risk execution context requires CircuitState")
+    return RiskExecutionContext(
+        as_of=state.as_of,
+        strategy_version=state.strategy_version,
+        config_hash=state.config_hash,
+        entry_risk_multiplier=state.entry_risk_multiplier,
+        circuit_state_identity=circuit_state_identity(state),
+        new_entries_blocked=state.new_entries_blocked,
+    )
 
 
 def circuit_state_artifact_path(root: Path | str, as_of: date) -> Path:

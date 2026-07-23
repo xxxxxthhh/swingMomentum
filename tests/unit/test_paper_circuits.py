@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from smm.config.loader import load_config
 from smm.core.errors import DataValidationError
+from smm.domain.models import RiskExecutionContext
 from smm.paper.circuits import (
     CircuitInputs,
     CircuitState,
@@ -21,6 +22,7 @@ from smm.paper.circuits import (
     circuit_state_payload,
     evaluate_circuit_state,
     render_circuit_state_artifact,
+    risk_execution_context_for,
     write_circuit_state_artifact,
 )
 
@@ -340,6 +342,48 @@ def test_circuit_state_identity_rejects_non_circuit_state_input() -> None:
 
     with pytest.raises(DataValidationError, match="CircuitState"):
         circuit_state_identity(None)
+
+
+@pytest.mark.parametrize(
+    ("state", "blocked", "multiplier"),
+    [
+        (
+            evaluate(inputs=inputs(realized_loss_r_for_session=Decimal("-4.01"))),
+            True,
+            Decimal("1"),
+        ),
+        (
+            evaluate(inputs=inputs(marked_equity=Decimal("940"))),
+            False,
+            Decimal("0.5"),
+        ),
+        (
+            evaluate(inputs=inputs(integrity_halt=True)),
+            True,
+            Decimal("0"),
+        ),
+    ],
+    ids=("daily-loss-pause", "drawdown-reduce", "integrity-halt"),
+)
+def test_risk_execution_context_for_projects_all_circuit_tiers(
+    state: CircuitState,
+    blocked: bool,
+    multiplier: Decimal,
+) -> None:
+    context = risk_execution_context_for(state)
+
+    assert isinstance(context, RiskExecutionContext)
+    assert context.as_of == state.as_of
+    assert context.strategy_version == state.strategy_version
+    assert context.config_hash == state.config_hash
+    assert context.new_entries_blocked is blocked
+    assert context.entry_risk_multiplier == multiplier
+    assert context.circuit_state_identity == circuit_state_identity(state)
+
+
+def test_risk_execution_context_for_rejects_non_circuit_state_input() -> None:
+    with pytest.raises(DataValidationError, match="CircuitState"):
+        risk_execution_context_for(None)
 
 
 def test_circuit_state_artifact_is_canonical_and_idempotent(tmp_path: Path) -> None:

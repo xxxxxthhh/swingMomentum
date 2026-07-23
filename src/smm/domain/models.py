@@ -352,9 +352,13 @@ ALLOWED_SIGNAL_TRANSITIONS: dict[SignalState, frozenset[SignalState]] = {
             SignalState.CANCELLED,
         }
     ),
-    SignalState.RISK_ACCEPTED: frozenset({SignalState.ENTERED, SignalState.CANCELLED}),
+    SignalState.RISK_ACCEPTED: frozenset(
+        {SignalState.ENTERED, SignalState.STOPPED, SignalState.CANCELLED}
+    ),
     SignalState.RISK_REJECTED: frozenset({SignalState.EXPIRED}),
-    SignalState.ENTERED: frozenset({SignalState.ACTIVE}),
+    SignalState.ENTERED: frozenset(
+        {SignalState.ACTIVE, SignalState.EXITED, SignalState.STOPPED}
+    ),
     SignalState.ACTIVE: frozenset(
         {SignalState.EXITED, SignalState.STOPPED, SignalState.EXPIRED}
     ),

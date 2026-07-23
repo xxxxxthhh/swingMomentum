@@ -74,6 +74,25 @@ def test_selects_prior_triggers_in_deterministic_as_of_then_signal_id_order() ->
     assert select(second_tie, later, first_tie) == (first_tie, second_tie, later)
 
 
+def test_owns_signal_id_tie_break_when_multihop_source_was_seen_earlier() -> None:
+    earlier_watchlist = transition(
+        "ZZZ",
+        as_of=date(2024, 6, 18),
+        to_state=SignalState.WATCHLISTED,
+    )
+    later_trigger = transition(
+        "ZZZ",
+        as_of=date(2024, 6, 19),
+        from_state=SignalState.WATCHLISTED,
+    )
+    tied_single_hop = transition("AAA", as_of=date(2024, 6, 19))
+
+    assert select(earlier_watchlist, later_trigger, tied_single_hop) == (
+        tied_single_hop,
+        later_trigger,
+    )
+
+
 def test_excludes_trigger_created_on_evaluation_session() -> None:
     prior = transition("AAA", as_of=date(2024, 6, 19))
     same_day = transition("BBB", as_of=EVALUATION_AS_OF)

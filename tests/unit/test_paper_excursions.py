@@ -89,6 +89,21 @@ def test_later_session_preserves_mfe_and_extends_mae_from_prior_state() -> None:
     assert result.mae_r == Decimal("-1.5")
 
 
+def test_later_session_preserves_mae_when_current_low_is_less_extreme() -> None:
+    initial = update()
+    result = update(
+        bar=tradeable_bar(
+            date=NEXT_SESSION,
+            high=105.0,
+            low=99.525,
+        ),
+        prior_state=initial,
+    )
+
+    assert result.min_tradeable_low == Decimal("98.525")
+    assert result.mae_r == Decimal("-0.5")
+
+
 def test_later_session_without_prior_excursion_state_fails_closed() -> None:
     with pytest.raises(DataValidationError, match="prior excursion state"):
         update(bar=tradeable_bar(date=NEXT_SESSION))
@@ -121,8 +136,23 @@ def test_excursion_rejects_true_print_with_inverted_high_low() -> None:
         update(bar=tradeable_bar(high=98.0, low=99.0))
 
 
-def test_excursion_rejects_prior_state_with_mismatched_identity() -> None:
-    prior = update().model_copy(update={"initial_unit_risk": Decimal("3.2")})
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("position_id", "different-position"),
+        ("symbol", "MSFT"),
+        ("opened_as_of", date(2024, 6, 17)),
+        ("strategy_version", "SMM-V9.9.9"),
+        ("config_hash", "different-config-hash"),
+        ("entry_fill", Decimal("100.076")),
+        ("initial_unit_risk", Decimal("3.2")),
+    ],
+)
+def test_excursion_rejects_prior_state_with_mismatched_identity(
+    field: str,
+    value: object,
+) -> None:
+    prior = update().model_copy(update={field: value})
 
     with pytest.raises(DataValidationError, match="identity or position facts"):
         update(bar=tradeable_bar(date=NEXT_SESSION), prior_state=prior)

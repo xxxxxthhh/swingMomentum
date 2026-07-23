@@ -12,12 +12,20 @@ orchestrator exists.
 from __future__ import annotations
 
 from datetime import date
+from enum import StrEnum
 from typing import Any
 
+from smm.core.errors import DataValidationError
 from smm.domain.enums import MarketRegime
 from smm.report.format import dump_json_deterministic
 
-EXECUTION_MODE = "mvp_a_signal"
+
+class ExecutionMode(StrEnum):
+    """Explicit M7 operation choice recorded in a session manifest."""
+
+    MVP_A_SIGNAL = "mvp_a_signal"
+    SHADOW = "shadow"
+    PAPER = "paper"
 
 # §8: git_commit may be excluded from a byte-comparison only when the two
 # compared roots are legitimately at different tree SHAs -- and only the
@@ -38,16 +46,18 @@ def build_manifest(
     git_commit: str,
     transition_batch: dict[str, Any],
     artifact_hashes: dict[str, str],
+    execution_mode: ExecutionMode | str = ExecutionMode.MVP_A_SIGNAL,
 ) -> dict[str, Any]:
     """Assemble the manifest payload. No wall-clock, run id, or temp path
     field exists anywhere in this shape -- that is enforced by omission,
     not by a runtime check, so there is nothing here to accidentally leak.
     """
+    selected_mode = _execution_mode(execution_mode)
     return {
         "as_of": as_of.isoformat(),
         "strategy_version": strategy_version,
         "config_hash": config_hash,
-        "execution_mode": EXECUTION_MODE,
+        "execution_mode": selected_mode.value,
         "regime": regime.value,
         "provider_source": provider_source,
         "universe_snapshot_id": universe_snapshot_id,
@@ -62,3 +72,12 @@ def build_manifest(
 
 def render_manifest(manifest: dict[str, Any]) -> str:
     return dump_json_deterministic(manifest)
+
+
+def _execution_mode(value: object) -> ExecutionMode:
+    if not isinstance(value, str):
+        raise DataValidationError("execution mode must be a supported string")
+    try:
+        return ExecutionMode(value)
+    except ValueError as exc:
+        raise DataValidationError(f"unsupported execution mode: {value!r}") from exc

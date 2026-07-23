@@ -11,6 +11,8 @@ orchestrator exists.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from datetime import date
 from enum import StrEnum
 from typing import Any
@@ -33,6 +35,15 @@ class ExecutionMode(StrEnum):
 # is the explicit opt-in §8 requires; comparing manifests at equal tree SHA
 # must ignore this list and include git_commit anyway.
 CONDITIONALLY_EXCLUDED_FIELDS = ("git_commit",)
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+_SHADOW_ARTIFACT_KEYS = (
+    "report_csv",
+    "report_markdown",
+    "features_snapshot",
+    "portfolio_snapshot",
+    "circuit_state",
+    "risk_decisions",
+)
 
 
 def build_manifest(
@@ -70,6 +81,44 @@ def build_manifest(
     }
 
 
+def build_shadow_manifest(
+    *,
+    as_of: date,
+    strategy_version: str,
+    config_hash: str,
+    regime: MarketRegime,
+    provider_source: str,
+    universe_snapshot_id: str,
+    git_commit: str,
+    transition_batch: dict[str, Any],
+    artifact_hashes: Mapping[str, object],
+    circuit_state_identity: object,
+) -> dict[str, Any]:
+    """Assemble the strict, pure M7 shadow-manifest payload.
+
+    This keeps the byte-stable M4 builder unchanged while fixing the complete
+    shadow replay shape. Artifact writers own byte creation; this seam only
+    requires their resulting SHA-256 values and the circuit identity.
+    """
+    manifest = build_manifest(
+        as_of=as_of,
+        strategy_version=strategy_version,
+        config_hash=config_hash,
+        regime=regime,
+        provider_source=provider_source,
+        universe_snapshot_id=universe_snapshot_id,
+        git_commit=git_commit,
+        transition_batch=transition_batch,
+        artifact_hashes=_validated_shadow_artifact_hashes(artifact_hashes),
+        execution_mode=ExecutionMode.SHADOW,
+    )
+    manifest["circuit_state_identity"] = _validated_sha256(
+        circuit_state_identity,
+        label="circuit_state_identity",
+    )
+    return manifest
+
+
 def render_manifest(manifest: dict[str, Any]) -> str:
     return dump_json_deterministic(manifest)
 
@@ -81,3 +130,25 @@ def _execution_mode(value: object) -> ExecutionMode:
         return ExecutionMode(value)
     except ValueError as exc:
         raise DataValidationError(f"unsupported execution mode: {value!r}") from exc
+
+
+def _validated_shadow_artifact_hashes(
+    artifact_hashes: Mapping[str, object],
+) -> dict[str, str]:
+    if not isinstance(artifact_hashes, Mapping):
+        raise DataValidationError("shadow manifest artifact hashes must be a mapping")
+    if set(artifact_hashes) != set(_SHADOW_ARTIFACT_KEYS):
+        raise DataValidationError(
+            "shadow manifest artifact keys must be exactly "
+            f"{', '.join(_SHADOW_ARTIFACT_KEYS)}"
+        )
+    return {
+        key: _validated_sha256(artifact_hashes[key], label=f"artifact hash for {key}")
+        for key in _SHADOW_ARTIFACT_KEYS
+    }
+
+
+def _validated_sha256(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not _SHA256_HEX.fullmatch(value):
+        raise DataValidationError(f"{label} must be a 64-character lowercase SHA-256 hex")
+    return value

@@ -115,6 +115,12 @@ def test_allowed_transition() -> None:
     assert_signal_transition(SignalState.TRIGGERED, SignalState.RISK_REJECTED)
 
 
+def test_m7_paper_lifecycle_edges_are_allowed() -> None:
+    assert_signal_transition(SignalState.RISK_ACCEPTED, SignalState.STOPPED)
+    assert_signal_transition(SignalState.ENTERED, SignalState.EXITED)
+    assert_signal_transition(SignalState.ENTERED, SignalState.STOPPED)
+
+
 def test_illegal_transition() -> None:
     with pytest.raises(StateTransitionError):
         assert_signal_transition(SignalState.DETECTED, SignalState.ACTIVE)

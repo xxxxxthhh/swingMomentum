@@ -114,6 +114,20 @@ def test_shadow_loader_rejects_invalid_external_json_without_fallback(tmp_path: 
         )
 
 
+def test_shadow_loader_rejects_unreadable_external_path_without_fallback(
+    tmp_path: Path,
+) -> None:
+    missing_input = tmp_path / "missing-snapshot.json"
+
+    with pytest.raises(DataValidationError, match="cannot read"):
+        load_shadow_portfolio_snapshot(
+            missing_input,
+            as_of=AS_OF,
+            strategy_version=STRATEGY_VERSION,
+            config_hash=CONFIG_HASH,
+        )
+
+
 def test_snapshot_artifact_sorts_set_backed_identity_facts(tmp_path: Path) -> None:
     target = write_portfolio_snapshot_artifact(
         tmp_path,

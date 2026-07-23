@@ -84,3 +84,19 @@ def test_bad_as_of_is_rejected(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 2
+
+
+def test_portfolio_snapshot_requires_explicit_shadow_mode(tmp_path: Path) -> None:
+    result = run(tmp_path, "--portfolio-snapshot", str(tmp_path / "snapshot.json"))
+
+    assert result.exit_code == 1
+    assert "portfolio snapshot" in result.output
+    assert not (tmp_path / "runs").exists()
+
+
+def test_shadow_mode_requires_portfolio_snapshot(tmp_path: Path) -> None:
+    result = run(tmp_path, "--mode", "shadow")
+
+    assert result.exit_code == 1
+    assert "portfolio snapshot" in result.output
+    assert not (tmp_path / "runs").exists()

@@ -3,14 +3,14 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | accepted（rev.6；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受；Issue #57 定义 backlog expiry guardrail；Issue #60 定义 shadow snapshot audit basis；Issue #62 定义 strict shadow manifest assembly） |
+| 状态 | accepted（rev.6；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受；Issue #57 定义 backlog expiry guardrail；Issue #60 定义 shadow snapshot audit basis；Issue #62 定义 strict shadow manifest assembly）；rev.7 提案在 PR #68，待 Task Reviewer 复审 |
 | 日期 | 2026-07-23 |
 | 策略版本 | 不 bump；Issue #57 的数据治理护栏改变 `config_hash`，不改变 strategy identity |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§12.1、§26、§35、§53） |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)（M7 / PR8） |
 | 前置决策 | [M3](./2026-07-22_m3_watchlist_and_signal_lifecycle.md)、[M4](./2026-07-22_m4_signal_report_and_daily_task.md)、[M5](./2026-07-22_m5_risk_engine_and_planned_sizing.md)、[M6](./2026-07-22_m6_paper_broker_contract.md) |
 | 讨论依据 | [Issue #39](https://github.com/xxxxxthhh/swingMomentum/issues/39)；Task Reviewer comment `5055842914` |
-| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、其有界 expiry guardrail、CircuitState digest、shadow snapshot audit basis、strict shadow manifest assembly，以及 mode-aware manifest 的不可覆盖重放规则；不实现完整 runtime wiring。 |
+| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、其有界 expiry guardrail、CircuitState digest、shadow snapshot audit basis、strict shadow manifest assembly，以及 mode-aware manifest 的不可覆盖重放规则；PR #68 提案记录无 Paper/ledger 事实时的 bounded shadow-circuit 中性语义；不实现完整 runtime wiring。 |
 
 ---
 
@@ -215,6 +215,36 @@ previous seal 和 mode 的预检；随后按以下顺序在内存中推导：
 有不同 payload、或任何 transition 不能组成 X 的完整 multiset，整次 run fail closed；
 不得 seal 部分新的业务判断。
 
+#### 3.1 Shadow Slice 1 的 bounded neutral CircuitState（PR #68 rev.7 提案）
+
+首个 `shadow` runtime assembly 只编排步骤 3--7，且明确没有 Paper ledger、已结算
+trade 或历史 equity high-water 的事实源。为了让该限制成为可审计的运行边界，而非从
+实现反推的默认值，Slice 1 对每个通过 X-identity 校验的外部 `PortfolioSnapshot` 固定
+输入：
+
+```text
+realized_loss_r_for_session = 0
+marked_equity               = snapshot.account_equity
+prior_high_water_equity     = snapshot.account_equity
+integrity_halt              = false
+```
+
+因此产出的 `CircuitState` 固定记录 `high_water_equity == marked_equity`、
+`drawdown == 0`、无 circuit reason，且正常 entry multiplier 为 1。这里的
+`prior_high_water_equity` 相等**不是**对持续账户实际没有既往回撤的推断；它只是
+Stage A 的 bounded neutral shadow 语义：本路径没有可验证的既往 high-water 或当日
+realized-loss 事实，因而不会假装已计算过 drawdown-reduce / drawdown-stop。
+
+这项限制必须同时由 runtime integration regression 读取 canonical
+`circuit_state.json` 并钉死其输入/identity，防止未来改动静默改变该语义。它不授权
+变更 `PortfolioSnapshot`、Paper、ledger、live broker 或 config；也不能通过 current
+equity、open symbols、exposure 或 risk map 反推缺失的事实。
+
+当 Paper 事实来源可用时，必须在独立的已接受 ADR 中定义 prior high-water、session
+realized-loss、X identity/provenance 和缺失事实的 fail-closed 规则，随后才可取代这个
+bounded neutral 输入。该工作由 [Issue #69](https://github.com/xxxxxthhh/swingMomentum/issues/69)
+跟踪，且不属于 PR #68 或 Slice 2 的 N-day reproducibility gate。
+
 M4 的「M3 seal 先于报告 bundle、manifest 最后」恢复规则继续适用。M7 可以在
 transition seal 前提交已验证、可重放的 M6 ledger append；若随后 bundle/manifest
 失败，精确重跑只能把同 payload ledger 与 seal 视为 no-op 并重建缺失 bundle。
@@ -352,3 +382,4 @@ candidate-adapter tests before it can label real symbols.
 | 2026-07-23 | accepted（rev.4） | Issue #57 Task Reviewer comment `5061360150` 决定 required `risk.trigger_backlog_max_age_sessions=3` 与 `age >= N` expiry。它是仅改变 `config_hash` 的数据治理护栏；共享 provider-session helper，先 partition 再 risk，过期 reason 固定为 `trigger_backlog_expired`。 |
 | 2026-07-23 | accepted（rev.5） | Issue #60 Task Reviewer comment `5061866645` 接受 shadow external `PortfolioSnapshot` 的 canonical artifact/hash、normalized-byte idempotency 与 shadow-only preflight 边界；不启用 Risk、transition、ledger 或 paper runtime。 |
 | 2026-07-23 | accepted（rev.6） | Issue #62 Task Reviewer comment `5062413569` 接受专用 pure shadow manifest helper、固定六类 artifact（含空 risk batch）及全部 artifact/circuit identity 的严格 lowercase SHA-256 绑定；不启用 runtime wiring。 |
+| 2026-07-23 | proposed（rev.7；PR #68） | Task Reviewer comment `5064496160` 要求把 shadow CircuitState 的 neutral 事实源边界写入 ADR，并由 integration regression 钉死；这不改变 `PortfolioSnapshot` 模型，真实 high-water / realized-loss 来源留给 Issue #69。 |

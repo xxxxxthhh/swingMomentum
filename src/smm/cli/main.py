@@ -11,7 +11,8 @@ import typer
 
 from smm import __version__
 from smm.config.loader import load_config
-from smm.core.errors import ConfigError, FailClosedError
+from smm.core.errors import ConfigError, DataValidationError, FailClosedError
+from smm.report.manifest import ExecutionMode
 
 app = typer.Typer(help="Swing Momentum (SMM) CLI", no_args_is_help=True)
 
@@ -289,6 +290,14 @@ def run_daily_cmd(
         Path, typer.Option("--runs-dir", help="Artifact root base (nests by version/config_hash)")
     ] = Path("data/runs"),
     config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+    mode: Annotated[
+        ExecutionMode,
+        typer.Option("--mode", help="Explicit runtime mode; default preserves mvp_a_signal"),
+    ] = ExecutionMode.MVP_A_SIGNAL,
+    portfolio_snapshot: Annotated[
+        Path | None,
+        typer.Option("--portfolio-snapshot", help="Required external snapshot for --mode shadow"),
+    ] = None,
 ) -> None:
     """Run one M4 daily task: scan, seal transitions, write the report bundle.
 
@@ -307,7 +316,18 @@ def run_daily_cmd(
         raise typer.Exit(code=2) from exc
 
     try:
-        result = _execute_run_daily(loaded, session, source, cache_dir, runs_dir)
+        from smm.cli.daily import validate_run_daily_mode
+
+        validate_run_daily_mode(mode, portfolio_snapshot)
+        result = _execute_run_daily(
+            loaded,
+            session,
+            source,
+            cache_dir,
+            runs_dir,
+            mode=mode,
+            portfolio_snapshot=portfolio_snapshot,
+        )
     except FailClosedError as exc:
         typer.secho(f"fail-closed: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -321,7 +341,16 @@ def run_daily_cmd(
         typer.secho("exact rerun -- no-op", fg=typer.colors.YELLOW)
 
 
-def _execute_run_daily(loaded, session: date, source: Source, cache_dir: Path, runs_dir: Path):
+def _execute_run_daily(
+    loaded,
+    session: date,
+    source: Source,
+    cache_dir: Path,
+    runs_dir: Path,
+    *,
+    mode: ExecutionMode = ExecutionMode.MVP_A_SIGNAL,
+    portfolio_snapshot: Path | None = None,
+):
     from smm.cli.daily import artifact_root, run_daily
     from smm.data.generator import synthetic_universe, universe_rows
 
@@ -371,6 +400,8 @@ def _execute_run_daily(loaded, session: date, source: Source, cache_dir: Path, r
         root=root,
         provider_source=source.value,
         universe_snapshot_id=universe_snapshot_id,
+        mode=mode,
+        portfolio_snapshot=portfolio_snapshot,
     )
 
 
@@ -414,6 +445,52 @@ class _CacheOnlyProvider:
         from smm.data import cache as bar_cache
 
         return [b.date for b in bar_cache.read_bars(self._cache_dir, self._benchmark, start, end)]
+
+    def fetch_split_action_history(
+        self,
+        symbol: str,
+        start: date,
+        end: date,
+        *,
+        observation_cutoff: date,
+        expected_sessions: tuple[date, ...],
+    ):
+        """Provide explicit no-action provenance for generated synthetic bars.
+
+        This private provider is the CLI's offline synthetic path.  It never
+        claims a split history for adjusted/cache-only market data: only a
+        fully covered interval whose generated rows all carry the documented
+        no-corporate-action factor may cross the true-print boundary.
+        """
+
+        from smm.data import cache as bar_cache
+        from smm.paper import SplitActionHistory
+
+        sessions = tuple(expected_sessions)
+        if not sessions or sessions != tuple(sorted(set(sessions))):
+            raise DataValidationError("synthetic split history requires sorted unique sessions")
+        if start != sessions[0] or end != sessions[-1] or observation_cutoff != end:
+            raise DataValidationError(
+                "synthetic split history request does not match print coverage"
+            )
+        if not bar_cache.covers(self._cache_dir, symbol, start, observation_cutoff):
+            raise DataValidationError("synthetic split history cache coverage is incomplete")
+        bars = tuple(bar_cache.read_bars(self._cache_dir, symbol, start, observation_cutoff))
+        if tuple(bar.date for bar in bars) != sessions:
+            raise DataValidationError("synthetic split history lacks expected sessions")
+        if any(bar.adj_factor != 1.0 for bar in bars):
+            raise DataValidationError(
+                "cached provider cannot prove no split action for adjusted market bars"
+            )
+        return SplitActionHistory(
+            symbol=symbol.upper(),
+            requested_start=start,
+            requested_end=end,
+            coverage_start=start,
+            coverage_end=observation_cutoff,
+            observation_cutoff=observation_cutoff,
+            actions=(),
+        )
 
 
 def main() -> None:

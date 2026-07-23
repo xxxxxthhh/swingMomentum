@@ -3,14 +3,14 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | accepted（rev.2；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受） |
+| 状态 | accepted（rev.4；[PR #40](https://github.com/xxxxxthhh/swingMomentum/pull/40) Task Reviewer 复审接受；Issue #57 定义 backlog expiry guardrail） |
 | 日期 | 2026-07-23 |
-| 策略版本 | 不改变冻结阈值或 config identity；本 ADR 只冻结 M7 编排与审计语义 |
+| 策略版本 | 不 bump；Issue #57 的数据治理护栏改变 `config_hash`，不改变 strategy identity |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（§12.1、§26、§35、§53） |
 | 关联计划 | [../plans/2026-07-22_phase1_implementation_plan_v1_1.md](../plans/2026-07-22_phase1_implementation_plan_v1_1.md)（M7 / PR8） |
 | 前置决策 | [M3](./2026-07-22_m3_watchlist_and_signal_lifecycle.md)、[M4](./2026-07-22_m4_signal_report_and_daily_task.md)、[M5](./2026-07-22_m5_risk_engine_and_planned_sizing.md)、[M6](./2026-07-22_m6_paper_broker_contract.md) |
 | 讨论依据 | [Issue #39](https://github.com/xxxxxthhh/swingMomentum/issues/39)；Task Reviewer comment `5055842914` |
-| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、CircuitState digest，以及 mode-aware manifest 的不可覆盖重放规则；不实现运行时代码。 |
+| 变更摘要 | 冻结 M7 单 CLI 日序、延后消费 open-trigger backlog、其有界 expiry guardrail、CircuitState digest，以及 mode-aware manifest 的不可覆盖重放规则；不实现运行时代码。 |
 
 ---
 
@@ -129,13 +129,44 @@ PrintBar provenance；`ScoredSymbol` 本身没有 `as_of`，因此未来 runtime
 D scores 获得确定性 batch priority；(b) 若消费延迟，X+1 相对 D reference 的
 gap/stop-distance re-check 很可能取消 entry。两者均不是可在 runtime 中“刷新”的
 缺陷；X-recompute 会把已持久化的 D setup 偷换成新的 X trigger，违反本 ADR 的
-Option 1b 语义。未消费 `TRIGGERED` 的生命周期 expiry policy 是独立问题，必须另行
-ADR/config 决定，不得由 candidate adapter 隐式定义。
+Option 1b 语义。未消费 `TRIGGERED` 的生命周期 expiry policy 见 §2.2；它不得由
+candidate adapter 隐式定义。
 
 shadow 的 day-1 `PortfolioSnapshot` 同样必须作为带 X identity 的不可变外部输入；
 即使为空组合也必须显式带正 equity/cash 并通过既有 reconciliation。adapter 只验证
 该 snapshot 是否匹配 X，不决定 bootstrap 与未来 ledger-derived snapshot 的选择，
 也不写 manifest、ledger 或 transition。
+
+#### 2.2 Unconsumed `TRIGGERED` backlog expiry is a frozen data-governance guardrail
+
+Issue #57 Task Reviewer comment `5061360150` freezes a separate, bounded
+lifecycle guard for persisted triggers that have not yet reached Risk Engine:
+
+```text
+risk.trigger_backlog_max_age_sessions = 3
+age = provider-session index distance from trigger D to evaluation X
+age < 3   -> remain risk-eligible
+age >= 3  -> TRIGGERED -> EXPIRED at X, reason trigger_backlog_expired
+```
+
+The count must reuse the single shared sorted-and-unique provider-calendar
+helper used by WATCHLIST aging. Missing D/X sessions or an unordered/duplicate
+calendar fail closed. In particular, a normal D→D+1 evaluation has age 1; if
+one daily run is missed, D+2 has age 2 and remains eligible. At D+3 (age 3),
+the item is terminally expired instead of entering risk evaluation.
+
+The first composition boundary is a pure partition: it returns mutually
+exclusive `eligible` triggers and projected expiry transitions. Callers must
+consume only `eligible` in Risk Engine; an expired item cannot be both
+projected and risk-evaluated in the same run. This slice deliberately does not
+wire `run_daily`, Risk Engine invocation, candidate adapter, Paper, ledger, or
+broker behavior.
+
+This is a required, non-null positive V1.1+ config field. It is a data-governance
+guardrail in the M1 §2.4 sense: changing it changes `config_hash` and remains
+auditable, but does not bump `strategy_version` or redefine D-anchored candidate
+economics. A later explicitly frozen config may tune it without reopening the
+strategy identity.
 
 ### 3. 每个 session 的单 CLI 因果顺序
 
@@ -147,7 +178,8 @@ previous seal 和 mode 的预检；随后按以下顺序在内存中推导：
    scheduled exits -> pending accepted entries -> same-session stops
 2. X-close 的 mark、EMA/time-stop 判定与下次 open exit scheduling
 3. 用步骤 1/2 的 settled trades、mark 和 integrity facts 得到 CircuitState(X)
-4. 以 CircuitState(X) 消费 run 开始前的 TRIGGERED backlog，得到 RiskDecision(X)
+4. 先按 §2.2 partition run 开始前的 TRIGGERED backlog；只以 eligible 集合和
+   CircuitState(X) 得到 RiskDecision(X)，并将 expiry projection 纳入同日 transition 集合
 5. 计算 M4 的 X-close features / scan / report rows
 6. 组合 X 的所有 lifecycle transitions，恰好一次 append + batch seal
 7. 提交 mode 所需 artifacts；manifest 最后写入
@@ -250,6 +282,8 @@ candidate-adapter tests before it can label real symbols.
    mode-aware manifest。
 7. shadow 不创建任何 Paper ledger；paper 不连接 live broker；未知 risk cluster
    仍共享 `unclassified` 限额。
+8. frozen N=3 下 age 2 的 prior trigger 仍可被消费，age 3 只生成
+   `TRIGGERED -> EXPIRED` / `trigger_backlog_expired`；两者绝不同时进入风险路径。
 
 发布前仍须运行目标测试、完整 pytest、Ruff 与 `git diff --check`，并在 PR 附上
 完整 diff、当前 HEAD、CI 与 reviewer evidence。
@@ -258,7 +292,7 @@ candidate-adapter tests before it can label real symbols.
 
 ## 非目标
 
-- 本 PR 的运行时代码、CLI、config、schema、阈值或已有 artifact 重写；
+- `run_daily`、Risk Engine 调用、candidate adapter、Paper、ledger 或已有 artifact 重写；
 - live broker、做空、杠杆、期权、回测结论；
 - `EligibleCandidate` 的价格/stop/cost 公式重定义；
 - 风险簇标签的猜测、自动分类或 seed 数据提交；
@@ -273,3 +307,4 @@ candidate-adapter tests before it can label real symbols.
 | 2026-07-23 | proposed | Builder 根据 Issue #39 提出 M7 编排 ADR；Task Reviewer comment `5055842914` 已接受 canonical identity/mode boundary，并建议 Option 1b；等待对本 ADR 的整体复审。 |
 | 2026-07-23 | accepted（rev.2） | Task Reviewer comment `5056348471` 对精确 HEAD `7755c7259b7da143ee849af9329eb41ace3189b4` 完成复审并接受；PR #40 已合并。 |
 | 2026-07-23 | accepted（rev.3） | Issue #56 Task Reviewer comment `5060801844` 接受 D-anchored candidate + X risk context 与外部 shadow portfolio snapshot；本修订记录可取回性 fail-closed 与刻意保留的 staleness 成本，不改变运行时 wiring。 |
+| 2026-07-23 | accepted（rev.4） | Issue #57 Task Reviewer comment `5061360150` 决定 required `risk.trigger_backlog_max_age_sessions=3` 与 `age >= N` expiry。它是仅改变 `config_hash` 的数据治理护栏；共享 provider-session helper，先 partition 再 risk，过期 reason 固定为 `trigger_backlog_expired`。 |

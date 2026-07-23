@@ -190,6 +190,10 @@ class RiskSection(BaseModel):
         default=None, gt=Decimal("0"), lt=Decimal("1")
     )
     drawdown_stop_at: Decimal | None = Field(default=None, gt=Decimal("0"), lt=Decimal("1"))
+    # M7's unconsumed-trigger guardrail is absent only from the historical
+    # V1.0 identity. Every successor config must carry a real positive value;
+    # StrategyConfig enforces that versioned contract below.
+    trigger_backlog_max_age_sessions: int | None = Field(default=None, ge=1)
 
     @field_validator("risk_off_per_trade")
     @classmethod
@@ -324,9 +328,10 @@ class StrategyConfig(BaseModel):
     execution: ExecutionSection
 
     @model_validator(mode="after")
-    def post_v1_0_requires_m6_execution_contract(self) -> StrategyConfig:
-        # V1.0.0 predates this frozen execution contract. Every successor
-        # identity must carry it explicitly; none may fall back to defaults.
+    def post_v1_0_requires_m6_m7_config_contract(self) -> StrategyConfig:
+        # V1.0.0 predates these frozen execution and backlog-guardrail
+        # contracts. Every successor identity must carry them explicitly;
+        # none may fall back to defaults.
         if self.strategy.version == "SMM-V1.0.0":
             return self
 
@@ -338,9 +343,10 @@ class StrategyConfig(BaseModel):
             "risk.daily_loss_pause_r": self.risk.daily_loss_pause_r,
             "risk.drawdown_reduce_at": self.risk.drawdown_reduce_at,
             "risk.drawdown_stop_at": self.risk.drawdown_stop_at,
+            "risk.trigger_backlog_max_age_sessions": self.risk.trigger_backlog_max_age_sessions,
         }
         missing = [key for key, value in required.items() if value is None]
         if missing:
-            msg = f"SMM-V1.1.0 requires M6 config keys: {', '.join(missing)}"
+            msg = f"SMM-V1.1.0 requires M6/M7 config keys: {', '.join(missing)}"
             raise ValueError(msg)
         return self

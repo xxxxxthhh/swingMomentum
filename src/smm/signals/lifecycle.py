@@ -65,6 +65,19 @@ class SignalTransition(BaseModel):
         return self
 
 
+def session_age(sessions: Sequence[date], entry: date, as_of: date) -> int:
+    """Return provider-session index distance, rejecting ambiguous calendars."""
+    ordered = list(sessions)
+    if ordered != sorted(set(ordered)):
+        raise DataValidationError("session calendar must be sorted with unique sessions")
+    try:
+        return ordered.index(as_of) - ordered.index(entry)
+    except ValueError as exc:
+        raise DataValidationError(
+            f"session calendar does not contain entry {entry} and as_of {as_of}"
+        ) from exc
+
+
 def latest_transitions(
     transitions: Sequence[SignalTransition],
 ) -> dict[str, SignalTransition]:

@@ -9,7 +9,7 @@ import pytest
 from smm.core.errors import DataValidationError
 from smm.domain.enums import SignalState
 from smm.domain.identity import make_logical_signal_id, make_setup_key
-from smm.risk import open_trigger_backlog
+from smm.risk import open_trigger_backlog, partition_trigger_backlog
 from smm.signals.lifecycle import SignalTransition
 
 EVALUATION_AS_OF = date(2024, 6, 20)
@@ -62,6 +62,25 @@ def select(*transitions: SignalTransition) -> tuple[SignalTransition, ...]:
     )
 
 
+def partition(
+    *transitions: SignalTransition,
+    max_age_sessions: int = 3,
+):
+    return partition_trigger_backlog(
+        transitions,
+        evaluation_as_of=EVALUATION_AS_OF,
+        strategy_version=STRATEGY_VERSION,
+        config_hash=CONFIG_HASH,
+        sessions=(
+            date(2024, 6, 17),
+            date(2024, 6, 18),
+            date(2024, 6, 19),
+            EVALUATION_AS_OF,
+        ),
+        max_age_sessions=max_age_sessions,
+    )
+
+
 def test_empty_input_returns_empty_tuple() -> None:
     assert select() == ()
 
@@ -110,6 +129,69 @@ def test_excludes_setup_whose_latest_state_is_not_triggered() -> None:
     )
 
     assert select(source, rejected) == ()
+
+
+def test_partition_keeps_trigger_eligible_at_age_two_under_frozen_n_three() -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 18))
+
+    result = partition(trigger)
+
+    assert result.eligible == (trigger,)
+    assert result.expirations == ()
+
+
+def test_partition_expires_trigger_at_age_three_without_double_routing() -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 17))
+
+    result = partition(trigger)
+
+    assert result.eligible == ()
+    assert len(result.expirations) == 1
+    expiration = result.expirations[0]
+    assert expiration.signal_id == trigger.signal_id
+    assert expiration.from_state is SignalState.TRIGGERED
+    assert expiration.to_state is SignalState.EXPIRED
+    assert expiration.as_of == EVALUATION_AS_OF
+    assert expiration.reason_codes == ("trigger_backlog_expired",)
+    assert expiration.strategy_version == STRATEGY_VERSION
+    assert expiration.config_hash == CONFIG_HASH
+
+
+def test_partition_rejects_non_positive_age_limit() -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 18))
+
+    with pytest.raises(DataValidationError, match="max_age_sessions must be a positive integer"):
+        partition(trigger, max_age_sessions=0)
+
+
+@pytest.mark.parametrize("max_age_sessions", [True, 3.0, "3"])
+def test_partition_rejects_non_integer_age_limit(max_age_sessions: object) -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 18))
+
+    with pytest.raises(DataValidationError, match="max_age_sessions must be a positive integer"):
+        partition(trigger, max_age_sessions=max_age_sessions)  # type: ignore[arg-type]
+
+
+def test_partition_fails_closed_for_non_canonical_provider_calendar() -> None:
+    trigger = transition("AAA", as_of=date(2024, 6, 18))
+
+    with pytest.raises(
+        DataValidationError,
+        match="session calendar must be sorted with unique sessions",
+    ):
+        partition_trigger_backlog(
+            (trigger,),
+            evaluation_as_of=EVALUATION_AS_OF,
+            strategy_version=STRATEGY_VERSION,
+            config_hash=CONFIG_HASH,
+            sessions=(
+                date(2024, 6, 17),
+                date(2024, 6, 19),
+                date(2024, 6, 18),
+                EVALUATION_AS_OF,
+            ),
+            max_age_sessions=3,
+        )
 
 
 def test_rejects_future_dated_source_transition() -> None:

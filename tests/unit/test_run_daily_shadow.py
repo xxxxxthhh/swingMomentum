@@ -171,6 +171,21 @@ def test_shadow_consumes_only_start_of_run_backlog_and_seals_the_strict_bundle(
     }
     assert str(snapshot_source) not in manifest_text
 
+    # Slice 1 has no Paper/ledger fact source.  Its CircuitState contract is
+    # deliberately neutral and must remain auditable rather than becoming an
+    # implicit assumption in the runtime path.
+    circuit_state = json.loads(
+        (day_dir / "circuit_state.json").read_text(encoding="utf-8")
+    )
+    assert circuit_state["realized_loss_r_for_session"] == "0.000000"
+    assert circuit_state["marked_equity"] == "100000.000000"
+    assert circuit_state["high_water_equity"] == "100000.000000"
+    assert circuit_state["drawdown"] == "0.000000"
+    assert circuit_state["new_entries_blocked"] is False
+    assert circuit_state["entry_risk_multiplier"] == "1.000000"
+    assert circuit_state["reason_codes"] == []
+    assert manifest["circuit_state_identity"] == circuit_state["circuit_state_identity"]
+
     decisions = json.loads((day_dir / "risk_decisions.json").read_text(encoding="utf-8"))
     assert [decision["signal_id"] for decision in decisions] == [d_trigger.signal_id]
 

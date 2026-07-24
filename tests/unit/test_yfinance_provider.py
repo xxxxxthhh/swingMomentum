@@ -143,6 +143,27 @@ def test_plain_date_index_passes_through() -> None:
     assert YFinanceProvider._session_date(date(2024, 1, 2)) == date(2024, 1, 2)
 
 
+# --- row-to-bar validation -------------------------------------------------
+#
+# Bar's own OHLC invariants raise a bare pydantic ValidationError, which is
+# not a FailClosedError and carries no symbol/date. Left unwrapped, the CLI's
+# fail-closed handlers (which only catch FailClosedError) would miss it and
+# an operator would see a raw traceback instead of a clean stop.
+
+
+def test_row_with_low_above_open_is_rejected_with_symbol_and_date() -> None:
+    row = {
+        "Open": 172.77,
+        "High": 176.61,
+        "Low": 172.97,  # low > open — violates the Bar invariant
+        "Close": 176.61,
+        "Adj Close": 176.61,
+        "Volume": 1_000_000,
+    }
+    with pytest.raises(DataValidationError, match=r"ANET: 2026-07-23 invalid bar"):
+        YFinanceProvider._row_to_bar("ANET", date(2026, 7, 23), row)
+
+
 # --- split-action history ------------------------------------------------
 
 

@@ -47,6 +47,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from pydantic import ValidationError as PydanticValidationError
+
 from smm.config.schema import MarketDataRetrySection, ValidationSection
 from smm.core.errors import DataValidationError
 from smm.data import cache
@@ -485,16 +487,22 @@ class YFinanceProvider:
         adj_close = float(row["Adj Close"])
         if close <= 0:
             raise DataValidationError(f"{symbol}: non-positive close at {index}")
-        return Bar(
-            symbol=symbol.upper(),
-            date=cls._session_date(index),
-            open=float(row["Open"]),
-            high=float(row["High"]),
-            low=float(row["Low"]),
-            close=close,
-            volume=float(row["Volume"]),
-            adj_close=adj_close,
-            # Derived, never defaulted: a missing adj_close must fail rather
-            # than silently fall back to close (ADR §3.3).
-            adj_factor=adj_close / close,
-        )
+        session = cls._session_date(index)
+        try:
+            return Bar(
+                symbol=symbol.upper(),
+                date=session,
+                open=float(row["Open"]),
+                high=float(row["High"]),
+                low=float(row["Low"]),
+                close=close,
+                volume=float(row["Volume"]),
+                adj_close=adj_close,
+                # Derived, never defaulted: a missing adj_close must fail rather
+                # than silently fall back to close (ADR §3.3).
+                adj_factor=adj_close / close,
+            )
+        except PydanticValidationError as exc:
+            # Preserve fail-closed rejection while adding the symbol/session
+            # context required for the CLI's operator-facing error boundary.
+            raise DataValidationError(f"{symbol}: {session} invalid bar: {exc}") from exc

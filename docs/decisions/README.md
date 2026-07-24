@@ -19,6 +19,7 @@
 - [2026-07-22_m6_paper_broker_contract.md](./2026-07-22_m6_paper_broker_contract.md)（accepted；rev.2）— M6 true-print、Paper Broker、退出、人工 SKIP 与熔断契约
 - [2026-07-23_m7_daily_orchestration_and_audit_contract.md](./2026-07-23_m7_daily_orchestration_and_audit_contract.md)（accepted；rev.6）— M7 单 CLI 日序、延后风险评估、CircuitState digest、mode-aware artifact bundle、trigger-backlog expiry guardrail、shadow external `PortfolioSnapshot` audit basis 与 strict shadow manifest assembly
 - [2026-07-24_market_data_retry_and_reconciliation_gates.md](./2026-07-24_market_data_retry_and_reconciliation_gates.md)（accepted；PR #74）— 行情供应商短时重试、整轮 fail-closed、人工延迟重跑与 Stage C 双源对账门槛
-- [2026-07-24_index_change_volume_spike_verification.md](./2026-07-24_index_change_volume_spike_verification.md)（accepted；Issue #77 / PR #78）— 用版本化的 S&P 官方成分变更事实确定性验证生效前一交易日或生效日的极端成交量；缺失或冲突仍整轮 fail-closed
+- [2026-07-24_index_change_volume_spike_verification.md](./2026-07-24_index_change_volume_spike_verification.md)（accepted rev.2；Issue #77 / PR #78 / Issue #85）— 用版本化的 S&P 500 或 Nasdaq-100 官方成分变更事实确定性验证生效前一交易日或生效日的极端成交量；index/source host 必须成对匹配，缺失或冲突仍整轮 fail-closed
+- [2026-07-24_official_exchange_missing_bar_supplement.md](./2026-07-24_official_exchange_missing_bar_supplement.md)（accepted；Issue #85）— 用版本化的官方交易所快照补充单一精确 provider session 空洞；绑定 SEC 身份、provider 复权证据与 manifest，冲突仍整轮 fail-closed
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

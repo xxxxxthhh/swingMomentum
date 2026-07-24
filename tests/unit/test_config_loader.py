@@ -14,7 +14,7 @@ from smm.core.errors import ConfigError
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = REPO / "configs" / "smm_v1_0_0.yaml"
 M6_YAML = REPO / "configs" / "smm_v1_1_0.yaml"
-V1_0_CONFIG_HASH = "57c1ad4b14ff8ea0a00dc86c56220244581d1d39135a4cad269698444be37d03"
+V1_0_CONFIG_HASH = "ff32460f166df944a0915296abb30baeb594ef45f39bfa6c878319462c9190d1"
 
 
 def _m6_mapping() -> dict:
@@ -81,16 +81,43 @@ def test_market_data_retry_policy_changes_config_hash_without_version_bump() -> 
     assert changed.config_hash != original.config_hash
 
 
-def test_volume_spike_policy_changes_config_hash_without_version_bump() -> None:
+def test_volume_spike_policy_rejects_unreviewed_source_host() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    raw["validation"]["volume_spike_verification"]["allowed_source_hosts_by_index"][
+        "Nasdaq-100"
+    ].append("indexes.nasdaq.com")
+
+    with pytest.raises(ConfigError, match="allowed_source_hosts_by_index"):
+        load_config_from_mapping(raw)
+
+
+def test_volume_spike_policy_freezes_index_specific_official_sources() -> None:
+    policy = load_config(DEFAULT_YAML).config.validation.volume_spike_verification
+
+    assert policy.policy == "official_sp500_nasdaq100_constituent_change_v2"
+    assert policy.allowed_indexes == ["S&P 500", "Nasdaq-100"]
+    assert policy.allowed_source_hosts_by_index == {
+        "S&P 500": ["press.spglobal.com", "www.spglobal.com"],
+        "Nasdaq-100": ["ir.nasdaq.com", "www.nasdaq.com"],
+    }
+
+
+def test_official_bar_supplement_policy_is_exact_and_hashed() -> None:
     raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
     original = load_config_from_mapping(raw)
-    raw["validation"]["volume_spike_verification"]["allowed_source_hosts"].append(
-        "example.spglobal.com"
-    )
-    changed = load_config_from_mapping(raw)
+    policy = original.config.validation.official_bar_supplement
 
-    assert changed.version == original.version
-    assert changed.config_hash != original.config_hash
+    assert policy.policy == "official_exchange_isolated_missing_bar_v1"
+    assert policy.max_missing_sessions_per_symbol == 1
+    assert policy.allowed_bar_source_hosts == ["api.nasdaq.com"]
+    assert policy.allowed_identity_source_hosts == ["www.sec.gov"]
+    assert policy.adjustment_method == "adjacent_provider_equal_close_v1"
+
+    raw["validation"]["official_bar_supplement"]["allowed_bar_source_hosts"].append(
+        "example.com"
+    )
+    with pytest.raises(ConfigError, match="allowed_bar_source_hosts"):
+        load_config_from_mapping(raw)
 
 
 def test_load_v1_1_config_freezes_m6_cost_and_circuit_values() -> None:

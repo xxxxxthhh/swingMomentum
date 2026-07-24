@@ -18,7 +18,10 @@ from urllib.parse import urlparse
 from smm.config.schema import VolumeSpikeVerificationSection
 from smm.core.errors import DataValidationError
 
-_SNAPSHOT = re.compile(r"^(?P<day>\d{4}-\d{2}-\d{2})_sp500_constituent_changes\.csv$")
+_SNAPSHOT = re.compile(
+    r"^(?P<day>\d{4}-\d{2}-\d{2})_"
+    r"(?P<scope>sp500|index)_constituent_changes\.csv$"
+)
 _SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]*$")
 _FIELDS = (
     "event_id",
@@ -96,8 +99,8 @@ def load_market_event_snapshot(
     cfg: VolumeSpikeVerificationSection,
 ) -> MarketEventSnapshot:
     """Select and validate the newest committed snapshot visible at ``as_of``."""
-    candidates: list[tuple[date, Path]] = []
-    for path in Path(directory).glob("*_sp500_constituent_changes.csv"):
+    candidates: list[tuple[date, int, Path]] = []
+    for path in Path(directory).glob("*_constituent_changes.csv"):
         match = _SNAPSHOT.fullmatch(path.name)
         if not match:
             continue
@@ -106,11 +109,16 @@ def load_market_event_snapshot(
         except ValueError:
             continue
         if snapshot_date <= as_of:
-            candidates.append((snapshot_date, path))
+            candidates.append(
+                (snapshot_date, int(match.group("scope") == "index"), path)
+            )
     if not candidates:
         raise DataValidationError(f"no market-event snapshot is visible at {as_of}")
 
-    snapshot_date, path = max(candidates, key=lambda item: (item[0], item[1].name))
+    snapshot_date, _, path = max(
+        candidates,
+        key=lambda item: (item[0], item[1], item[2].name),
+    )
     payload = path.read_bytes()
     try:
         text = payload.decode("utf-8")
@@ -156,7 +164,7 @@ def match_market_event(
     if len(matches) != 1:
         raise DataValidationError(
             f"{symbol.upper()}: {spike_session} volume spike has no unique official "
-            "S&P 500 constituent-change event in the T-1/T window"
+            "index constituent-change event in the T-1/T window"
         )
     return matches[0]
 
@@ -189,8 +197,11 @@ def _parse_event(
     if not _SYMBOL.fullmatch(symbol):
         raise DataValidationError(f"{path.name}: invalid exact symbol {symbol!r}")
     parsed_url = urlparse(source_url)
-    if parsed_url.scheme != "https" or parsed_url.hostname not in cfg.allowed_source_hosts:
-        raise DataValidationError(f"{path.name}: event source is not an allowed official host")
+    allowed_hosts = cfg.allowed_source_hosts_by_index[index_name]
+    if parsed_url.scheme != "https" or parsed_url.hostname not in allowed_hosts:
+        raise DataValidationError(
+            f"{path.name}: event source host is not allowed for {index_name}"
+        )
     return MarketEvent(
         event_id=event_id,
         source_published_date=published,

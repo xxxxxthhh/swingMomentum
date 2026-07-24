@@ -18,5 +18,6 @@
 - [2026-07-22_m5_risk_engine_and_planned_sizing.md](./2026-07-22_m5_risk_engine_and_planned_sizing.md)（accepted；rev.2）— M5 风险引擎、计划仓位、批内预算与生命周期边界
 - [2026-07-22_m6_paper_broker_contract.md](./2026-07-22_m6_paper_broker_contract.md)（accepted；rev.2）— M6 true-print、Paper Broker、退出、人工 SKIP 与熔断契约
 - [2026-07-23_m7_daily_orchestration_and_audit_contract.md](./2026-07-23_m7_daily_orchestration_and_audit_contract.md)（accepted；rev.6）— M7 单 CLI 日序、延后风险评估、CircuitState digest、mode-aware artifact bundle、trigger-backlog expiry guardrail、shadow external `PortfolioSnapshot` audit basis 与 strict shadow manifest assembly
+- [2026-07-24_market_data_retry_and_reconciliation_gates.md](./2026-07-24_market_data_retry_and_reconciliation_gates.md)（proposed；Issue #73 方向已裁决）— 行情供应商短时重试、整轮 fail-closed、人工延迟重跑与 Stage C 双源对账门槛
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

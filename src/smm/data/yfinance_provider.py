@@ -52,6 +52,10 @@ from pydantic import ValidationError as PydanticValidationError
 from smm.config.schema import MarketDataRetrySection, ValidationSection
 from smm.core.errors import DataValidationError
 from smm.data import cache
+from smm.data.market_events import (
+    VolumeSpikeVerification,
+    load_market_event_snapshot,
+)
 from smm.data.universe import load_universe
 from smm.data.validation import to_session_date, validate_bars
 from smm.domain.models import Bar
@@ -84,6 +88,7 @@ class YFinanceProvider:
         validation: ValidationSection,
         retry: MarketDataRetrySection,
         max_snapshot_age_days: int,
+        market_events_dir: Path | str | None = None,
         benchmark: str = "SPY",
         sleeper: Callable[[float], None] = time.sleep,
         attempt_logger: Callable[[str], None] | None = None,
@@ -94,8 +99,14 @@ class YFinanceProvider:
         self._retry = retry
         self._max_snapshot_age_days = max_snapshot_age_days
         self._benchmark = benchmark.upper()
+        self._market_events_dir = (
+            Path(market_events_dir) if market_events_dir is not None else None
+        )
         self._sleeper = sleeper
         self._attempt_logger = attempt_logger
+        self._volume_verifications: dict[
+            tuple[str, date, str], VolumeSpikeVerification
+        ] = {}
 
     # -- DataProvider ----------------------------------------------------
 
@@ -107,12 +118,43 @@ class YFinanceProvider:
 
     def get_daily_bars(self, symbol: str, start: date, end: date) -> Sequence[Bar]:
         if cache.covers(self._cache_dir, symbol, start, end):
-            return cache.read_bars(self._cache_dir, symbol, start, end)
+            bars = cache.read_bars(self._cache_dir, symbol, start, end)
+            self._validate_and_collect(
+                bars,
+                calendar=self._calendar_for(symbol, start, end),
+                as_of=end,
+            )
+            return bars
         fetched = self.fetch(
             symbol, start, end, calendar=self._calendar_for(symbol, start, end)
         )
         cache.write_bars(self._cache_dir, symbol, fetched, requested=(start, end))
         return cache.read_bars(self._cache_dir, symbol, start, end)
+
+    def market_data_verifications(self) -> tuple[VolumeSpikeVerification, ...]:
+        """Deterministic evidence accumulated by all validated provider reads."""
+        return tuple(
+            self._volume_verifications[key]
+            for key in sorted(self._volume_verifications)
+        )
+
+    def reset_market_data_verifications(self) -> None:
+        """Begin a new daily evidence scope without changing cached market data."""
+        self._volume_verifications.clear()
+
+    def market_event_snapshot_identity(self) -> dict[str, str] | None:
+        identities = {
+            (record.snapshot_id, record.snapshot_sha256)
+            for record in self._volume_verifications.values()
+        }
+        if not identities:
+            return None
+        if len(identities) != 1:
+            raise DataValidationError(
+                "one daily run collected volume verifications from multiple event snapshots"
+            )
+        snapshot_id, sha256 = next(iter(identities))
+        return {"id": snapshot_id, "sha256": sha256}
 
     def get_calendar(self, start: date, end: date) -> list[date]:
         """Sessions observed in the cached benchmark series.
@@ -261,12 +303,53 @@ class YFinanceProvider:
                 "provider_normalization", f"{type(exc).__name__}: {exc}"
             ) from exc
         try:
-            validate_bars(bars, cfg=self._validation, calendar=calendar)
+            self._validate_and_collect(bars, calendar=calendar, as_of=end)
         except DataValidationError as exc:
             raise _RetryableProviderError(
                 "provider_validation", f"{type(exc).__name__}: {exc}"
             ) from exc
         return bars
+
+    def _validate_and_collect(
+        self,
+        bars: Sequence[Bar],
+        *,
+        calendar: list[date] | None,
+        as_of: date,
+    ) -> None:
+        snapshot = None
+        volumes = sorted(bar.volume for bar in bars)
+        if volumes:
+            median = volumes[len(volumes) // 2]
+            has_spike = median > 0 and any(
+                bar.volume / median > self._validation.max_volume_spike_ratio
+                for bar in bars
+            )
+            if has_spike:
+                if self._market_events_dir is None:
+                    raise DataValidationError(
+                        "volume spike requires a configured market-event snapshot directory"
+                    )
+                snapshot = load_market_event_snapshot(
+                    self._market_events_dir,
+                    as_of=as_of,
+                    cfg=self._validation.volume_spike_verification,
+                )
+        records = validate_bars(
+            bars,
+            cfg=self._validation,
+            calendar=calendar,
+            event_snapshot=snapshot,
+        )
+        for record in records:
+            key = (record.symbol, record.session, record.event_id)
+            prior = self._volume_verifications.get(key)
+            if prior is not None and prior != record:
+                raise DataValidationError(
+                    f"{record.symbol}: conflicting volume verification evidence "
+                    f"for {record.session}"
+                )
+            self._volume_verifications[key] = record
 
     def _log_attempt(
         self,

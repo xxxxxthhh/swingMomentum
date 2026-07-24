@@ -152,12 +152,14 @@ def _ingest_market(
     from smm.data.yfinance_provider import YFinanceProvider
 
     universe_dir = Path(__file__).resolve().parents[3] / "configs" / "universe"
+    market_events_dir = Path(__file__).resolve().parents[3] / "configs" / "market_events"
     provider = YFinanceProvider(
         cache_dir=cache_dir,
         universe_dir=universe_dir,
         validation=loaded.config.validation,
         retry=loaded.config.market_data_retry,
         max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+        market_events_dir=market_events_dir,
         attempt_logger=_market_data_attempt_log,
         # Must be passed, not left to the default: otherwise ingest fetches the
         # configured benchmark while get_calendar keeps reading SPY, and the two
@@ -253,6 +255,7 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
         from smm.data.yfinance_provider import YFinanceProvider
 
         universe_dir = Path(__file__).resolve().parents[3] / "configs" / "universe"
+        market_events_dir = Path(__file__).resolve().parents[3] / "configs" / "market_events"
         snapshot = load_universe(
             universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
         )
@@ -264,6 +267,7 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
             validation=loaded.config.validation,
             retry=loaded.config.market_data_retry,
             max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            market_events_dir=market_events_dir,
             attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )
@@ -386,6 +390,7 @@ def _execute_run_daily(
         from smm.data.yfinance_provider import YFinanceProvider
 
         universe_dir = Path(__file__).resolve().parents[3] / "configs" / "universe"
+        market_events_dir = Path(__file__).resolve().parents[3] / "configs" / "market_events"
         snapshot = load_universe(
             universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
         )
@@ -397,6 +402,7 @@ def _execute_run_daily(
             validation=loaded.config.validation,
             retry=loaded.config.market_data_retry,
             max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            market_events_dir=market_events_dir,
             attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )

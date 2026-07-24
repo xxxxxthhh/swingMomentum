@@ -14,7 +14,7 @@ from smm.core.errors import ConfigError
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = REPO / "configs" / "smm_v1_0_0.yaml"
 M6_YAML = REPO / "configs" / "smm_v1_1_0.yaml"
-V1_0_CONFIG_HASH = "4d9e51a0fb38a1747e4a251c48097b9431b9a0f9fe2af4c835518f8cbead982a"
+V1_0_CONFIG_HASH = "91c34dac29bb1dc1f63c4144f9db5fbec8a96f07d1a02c0efdea862a933a5d2f"
 
 
 def _m6_mapping() -> dict:
@@ -75,6 +75,18 @@ def test_market_data_retry_policy_changes_config_hash_without_version_bump() -> 
     raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
     original = load_config_from_mapping(raw)
     raw["market_data_retry"]["backoff_seconds"] = [3, 8]
+    changed = load_config_from_mapping(raw)
+
+    assert changed.version == original.version
+    assert changed.config_hash != original.config_hash
+
+
+def test_volume_spike_policy_changes_config_hash_without_version_bump() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    original = load_config_from_mapping(raw)
+    raw["validation"]["volume_spike_verification"]["allowed_source_hosts"].append(
+        "example.spglobal.com"
+    )
     changed = load_config_from_mapping(raw)
 
     assert changed.version == original.version

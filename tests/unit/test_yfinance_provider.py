@@ -19,6 +19,7 @@ from smm.core.errors import DataValidationError
 from smm.data import cache
 from smm.data.generator import breakout_success
 from smm.data.yfinance_provider import YFinanceProvider
+from smm.domain.models import Bar
 
 REPO = Path(__file__).resolve().parents[2]
 CONFIG = load_config(REPO / "configs" / "smm_v1_0_0.yaml").config
@@ -41,6 +42,7 @@ def build(
         validation=CONFIG.validation,
         retry=CONFIG.market_data_retry,
         max_snapshot_age_days=CONFIG.universe.max_snapshot_age_days,
+        market_events_dir=REPO / "configs" / "market_events",
         **kwargs,
     )
 
@@ -73,9 +75,81 @@ def test_recorded_coverage_is_served_without_fetching(tmp_path: Path) -> None:
     cache.write_bars(
         tmp_path / "cache", "NVDA", bars, requested=(bars[0].date, bars[-1].date)
     )
+    benchmark = [item.model_copy(update={"symbol": "SPY"}) for item in bars]
+    cache.write_bars(
+        tmp_path / "cache",
+        "SPY",
+        benchmark,
+        requested=(benchmark[0].date, benchmark[-1].date),
+    )
     provider.fetch = _never_fetch  # type: ignore[method-assign]
     served = provider.get_daily_bars("NVDA", bars[10].date, bars[20].date)
     assert [b.date for b in served] == [b.date for b in bars[10:21]]
+
+
+def test_cached_casy_spike_reproduces_the_same_official_evidence(
+    tmp_path: Path,
+) -> None:
+    days = [
+        date(2026, 3, 27),
+        date(2026, 3, 30),
+        date(2026, 3, 31),
+        date(2026, 4, 1),
+        date(2026, 4, 2),
+        date(2026, 4, 3),
+        date(2026, 4, 6),
+        date(2026, 4, 7),
+        date(2026, 4, 8),
+    ]
+    volumes = [
+        300_000,
+        312_400,
+        320_000,
+        330_000,
+        338_700,
+        340_000,
+        350_000,
+        360_000,
+        8_688_600,
+    ]
+
+    def make(symbol: str, session: date, volume: float) -> Bar:
+        return Bar(
+            symbol=symbol,
+            date=session,
+            open=100,
+            high=101,
+            low=99,
+            close=100,
+            volume=volume,
+            adj_close=100,
+            adj_factor=1,
+        )
+
+    casy = [
+        make("CASY", session, volume)
+        for session, volume in zip(days, volumes, strict=True)
+    ]
+    spy = [make("SPY", session, 1_000_000) for session in days]
+    for symbol, bars in (("SPY", spy), ("CASY", casy)):
+        cache.write_bars(
+            tmp_path / "cache",
+            symbol,
+            bars,
+            requested=(days[0], days[-1]),
+        )
+
+    first = build(tmp_path)
+    first.fetch = _never_fetch  # type: ignore[method-assign]
+    first.get_daily_bars("CASY", days[0], days[-1])
+    first_payload = [record.to_payload() for record in first.market_data_verifications()]
+
+    second = build(tmp_path)
+    second.fetch = _never_fetch  # type: ignore[method-assign]
+    second.get_daily_bars("CASY", days[0], days[-1])
+
+    assert [record.to_payload() for record in second.market_data_verifications()] == first_payload
+    assert second.market_event_snapshot_identity() == first.market_event_snapshot_identity()
 
 
 def test_bars_present_without_recorded_coverage_still_refetch(tmp_path: Path) -> None:

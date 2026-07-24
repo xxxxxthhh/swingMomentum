@@ -66,13 +66,23 @@ def test_run_daily_writes_a_complete_bundle_and_manifest(tmp_path: Path) -> None
     day_dir = root / session.isoformat()
     assert (day_dir / "report.csv").exists()
     assert (day_dir / "report.md").exists()
+    assert (day_dir / "market_data_verifications.json").exists()
     assert (day_dir / "manifest.json").exists()
     assert sum(result.bucket_counts.values()) == result.row_count
 
     manifest = json.loads((day_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["execution_mode"] == "mvp_a_signal"
     assert manifest["as_of"] == session.isoformat()
-    assert set(manifest["artifacts"]) == {"report_csv", "report_markdown", "features_snapshot"}
+    assert set(manifest["artifacts"]) == {
+        "report_csv",
+        "report_markdown",
+        "features_snapshot",
+        "market_data_verifications",
+    }
+    assert manifest["market_event_snapshot"] is None
+    assert json.loads(
+        (day_dir / "market_data_verifications.json").read_text(encoding="utf-8")
+    ) == {"schema_version": 1, "verifications": []}
 
 
 def test_v1_1_execution_only_config_preserves_signal_rows(tmp_path: Path) -> None:

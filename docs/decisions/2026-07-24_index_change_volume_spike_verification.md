@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed |
+| 状态 | accepted |
 | 日期 | 2026-07-24 |
 | 策略版本 | SMM-V1.0.0 / SMM-V1.1.0（不 bump；验证政策改变 `config_hash`） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（原则 9、11、13；§12.3、§12.4、§37） |

@@ -14,7 +14,7 @@ from smm.core.errors import ConfigError
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = REPO / "configs" / "smm_v1_0_0.yaml"
 M6_YAML = REPO / "configs" / "smm_v1_1_0.yaml"
-V1_0_CONFIG_HASH = "91c34dac29bb1dc1f63c4144f9db5fbec8a96f07d1a02c0efdea862a933a5d2f"
+V1_0_CONFIG_HASH = "57c1ad4b14ff8ea0a00dc86c56220244581d1d39135a4cad269698444be37d03"
 
 
 def _m6_mapping() -> dict:

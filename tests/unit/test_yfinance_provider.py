@@ -43,6 +43,8 @@ def build(
         retry=CONFIG.market_data_retry,
         max_snapshot_age_days=CONFIG.universe.max_snapshot_age_days,
         market_events_dir=REPO / "configs" / "market_events",
+        price_events_dir=REPO / "configs" / "price_events",
+        security_identities_dir=REPO / "configs" / "security_identities",
         **kwargs,
     )
 
@@ -150,6 +152,66 @@ def test_cached_casy_spike_reproduces_the_same_official_evidence(
 
     assert [record.to_payload() for record in second.market_data_verifications()] == first_payload
     assert second.market_event_snapshot_identity() == first.market_event_snapshot_identity()
+
+
+def test_cached_echo_jump_reproduces_edgar_and_identity_evidence(
+    tmp_path: Path,
+) -> None:
+    days = [date(2025, 8, 25), date(2025, 8, 26)]
+    evidence_as_of = date(2026, 7, 23)
+
+    def make(
+        symbol: str,
+        session: date,
+        *,
+        close: float,
+        volume: float,
+    ) -> Bar:
+        return Bar(
+            symbol=symbol,
+            date=session,
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=volume,
+            adj_close=close,
+            adj_factor=1,
+        )
+
+    echo = [
+        make("ECHO", days[0], close=29.879999, volume=2_493_700),
+        make("ECHO", days[1], close=50.869999, volume=46_579_100),
+    ]
+    spy = [
+        make("SPY", day, close=650, volume=50_000_000)
+        for day in days
+    ]
+    for symbol, bars in (("SPY", spy), ("ECHO", echo)):
+        cache.write_bars(
+            tmp_path / "cache",
+            symbol,
+            bars,
+            requested=(days[0], evidence_as_of),
+        )
+
+    provider = build(tmp_path)
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
+    provider.get_daily_bars("ECHO", days[0], evidence_as_of)
+
+    records = provider.market_data_verifications()
+    assert len(records) == 1
+    assert records[0].to_payload()["verification_kind"] == "price_jump"
+    assert provider.market_data_snapshot_identities() == {
+        "price_event": {
+            "id": "2026-07-23_edgar_item_1_01",
+            "sha256": records[0].to_payload()["price_event_snapshot_sha256"],
+        },
+        "security_identity": {
+            "id": "2026-07-23_symbol_mappings",
+            "sha256": records[0].to_payload()["security_identity_snapshot_sha256"],
+        },
+    }
 
 
 def test_bars_present_without_recorded_coverage_still_refetch(tmp_path: Path) -> None:

@@ -56,6 +56,11 @@ from smm.data.market_events import (
     VolumeSpikeVerification,
     load_market_event_snapshot,
 )
+from smm.data.price_events import (
+    PriceJumpVerification,
+    load_price_event_snapshot,
+    load_security_identity_snapshot,
+)
 from smm.data.universe import load_universe
 from smm.data.validation import to_session_date, validate_bars
 from smm.domain.models import Bar
@@ -89,6 +94,8 @@ class YFinanceProvider:
         retry: MarketDataRetrySection,
         max_snapshot_age_days: int,
         market_events_dir: Path | str | None = None,
+        price_events_dir: Path | str | None = None,
+        security_identities_dir: Path | str | None = None,
         benchmark: str = "SPY",
         sleeper: Callable[[float], None] = time.sleep,
         attempt_logger: Callable[[str], None] | None = None,
@@ -102,10 +109,21 @@ class YFinanceProvider:
         self._market_events_dir = (
             Path(market_events_dir) if market_events_dir is not None else None
         )
+        self._price_events_dir = (
+            Path(price_events_dir) if price_events_dir is not None else None
+        )
+        self._security_identities_dir = (
+            Path(security_identities_dir)
+            if security_identities_dir is not None
+            else None
+        )
         self._sleeper = sleeper
         self._attempt_logger = attempt_logger
         self._volume_verifications: dict[
             tuple[str, date, str], VolumeSpikeVerification
+        ] = {}
+        self._price_verifications: dict[
+            tuple[str, date, str], PriceJumpVerification
         ] = {}
 
     # -- DataProvider ----------------------------------------------------
@@ -131,15 +149,23 @@ class YFinanceProvider:
         cache.write_bars(self._cache_dir, symbol, fetched, requested=(start, end))
         return cache.read_bars(self._cache_dir, symbol, start, end)
 
-    def market_data_verifications(self) -> tuple[VolumeSpikeVerification, ...]:
+    def market_data_verifications(
+        self,
+    ) -> tuple[PriceJumpVerification | VolumeSpikeVerification, ...]:
         """Deterministic evidence accumulated by all validated provider reads."""
-        return tuple(
+        price = tuple(
+            self._price_verifications[key]
+            for key in sorted(self._price_verifications)
+        )
+        volume = tuple(
             self._volume_verifications[key]
             for key in sorted(self._volume_verifications)
         )
+        return (*price, *volume)
 
     def reset_market_data_verifications(self) -> None:
         """Begin a new daily evidence scope without changing cached market data."""
+        self._price_verifications.clear()
         self._volume_verifications.clear()
 
     def market_event_snapshot_identity(self) -> dict[str, str] | None:
@@ -155,6 +181,38 @@ class YFinanceProvider:
             )
         snapshot_id, sha256 = next(iter(identities))
         return {"id": snapshot_id, "sha256": sha256}
+
+    def market_data_snapshot_identities(self) -> dict[str, dict[str, str]]:
+        """All committed snapshot identities consumed by this daily evidence."""
+        output: dict[str, dict[str, str]] = {}
+        price_events = {
+            (record.price_event_snapshot_id, record.price_event_snapshot_sha256)
+            for record in self._price_verifications.values()
+        }
+        security_identities = {
+            (
+                record.security_identity_snapshot_id,
+                record.security_identity_snapshot_sha256,
+            )
+            for record in self._price_verifications.values()
+        }
+        volume_events = {
+            (record.snapshot_id, record.snapshot_sha256)
+            for record in self._volume_verifications.values()
+        }
+        for label, identities in (
+            ("price_event", price_events),
+            ("security_identity", security_identities),
+            ("volume_event", volume_events),
+        ):
+            if len(identities) > 1:
+                raise DataValidationError(
+                    f"one daily run collected {label} evidence from multiple snapshots"
+                )
+            if identities:
+                snapshot_id, sha256 = next(iter(identities))
+                output[label] = {"id": snapshot_id, "sha256": sha256}
+        return output
 
     def get_calendar(self, start: date, end: date) -> list[date]:
         """Sessions observed in the cached benchmark series.
@@ -317,7 +375,30 @@ class YFinanceProvider:
         calendar: list[date] | None,
         as_of: date,
     ) -> None:
-        snapshot = None
+        volume_snapshot = None
+        price_snapshot = None
+        identity_snapshot = None
+        has_jump = any(
+            abs(current.close / previous.close - 1.0)
+            > self._validation.max_abs_daily_return
+            for previous, current in zip(bars, bars[1:], strict=False)
+        )
+        if has_jump:
+            if self._price_events_dir is None or self._security_identities_dir is None:
+                raise DataValidationError(
+                    "price jump requires configured price-event and "
+                    "security-identity snapshot directories"
+                )
+            price_snapshot = load_price_event_snapshot(
+                self._price_events_dir,
+                as_of=as_of,
+                cfg=self._validation.price_jump_verification,
+            )
+            identity_snapshot = load_security_identity_snapshot(
+                self._security_identities_dir,
+                as_of=as_of,
+                cfg=self._validation.price_jump_verification,
+            )
         volumes = sorted(bar.volume for bar in bars)
         if volumes:
             median = volumes[len(volumes) // 2]
@@ -330,7 +411,7 @@ class YFinanceProvider:
                     raise DataValidationError(
                         "volume spike requires a configured market-event snapshot directory"
                     )
-                snapshot = load_market_event_snapshot(
+                volume_snapshot = load_market_event_snapshot(
                     self._market_events_dir,
                     as_of=as_of,
                     cfg=self._validation.volume_spike_verification,
@@ -339,17 +420,24 @@ class YFinanceProvider:
             bars,
             cfg=self._validation,
             calendar=calendar,
-            event_snapshot=snapshot,
+            event_snapshot=volume_snapshot,
+            price_event_snapshot=price_snapshot,
+            identity_snapshot=identity_snapshot,
         )
         for record in records:
             key = (record.symbol, record.session, record.event_id)
-            prior = self._volume_verifications.get(key)
+            target = (
+                self._price_verifications
+                if isinstance(record, PriceJumpVerification)
+                else self._volume_verifications
+            )
+            prior = target.get(key)
             if prior is not None and prior != record:
                 raise DataValidationError(
-                    f"{record.symbol}: conflicting volume verification evidence "
+                    f"{record.symbol}: conflicting market-data verification evidence "
                     f"for {record.session}"
                 )
-            self._volume_verifications[key] = record
+            target[key] = record
 
     def _log_attempt(
         self,

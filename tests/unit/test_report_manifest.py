@@ -76,6 +76,51 @@ def test_manifest_default_mode_preserves_the_m4_bytes() -> None:
     )
 
 
+def test_manifest_binds_all_market_data_snapshot_identities() -> None:
+    manifest = build_manifest(
+        as_of=date(2024, 6, 10),
+        strategy_version="SMM-V1.0.0",
+        config_hash="abc123",
+        regime=MarketRegime.RISK_ON,
+        provider_source="yfinance",
+        universe_snapshot_id="2024-06-10_sp500_ndx",
+        git_commit="deadbeef",
+        transition_batch={
+            "as_of": "2024-06-10",
+            "transition_count": 0,
+            "batch_digest": "x",
+        },
+        artifact_hashes={"report_csv": "aaa", "report_markdown": "bbb"},
+        market_data_snapshots={
+            "price_event": {"id": "events", "sha256": "a" * 64},
+            "security_identity": {"id": "identities", "sha256": "b" * 64},
+        },
+    )
+
+    assert manifest["market_data_snapshots"] == {
+        "price_event": {"id": "events", "sha256": "a" * 64},
+        "security_identity": {"id": "identities", "sha256": "b" * 64},
+    }
+
+
+def test_manifest_rejects_unknown_market_data_snapshot_kind() -> None:
+    with pytest.raises(DataValidationError, match="unsupported snapshot kind"):
+        build_manifest(
+            as_of=date(2024, 6, 10),
+            strategy_version="SMM-V1.0.0",
+            config_hash="abc123",
+            regime=MarketRegime.RISK_ON,
+            provider_source="yfinance",
+            universe_snapshot_id="snapshot",
+            git_commit="deadbeef",
+            transition_batch={},
+            artifact_hashes={},
+            market_data_snapshots={
+                "unknown": {"id": "x", "sha256": "a" * 64},
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("execution_mode", "expected"),
     [

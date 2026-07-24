@@ -36,6 +36,14 @@ validation:
     allowed_actions: [addition, deletion]
     session_offsets: [-1, 0]
     allowed_source_hosts: [press.spglobal.com, www.spglobal.com]
+  price_jump_verification:
+    policy: edgar_8k_item_1_01_v1
+    allowed_forms: ["8-K"]
+    allowed_items: ["1.01"]
+    allowed_source_hosts: [www.sec.gov]
+    allowed_identity_source_hosts: [ir.echostar.com, www.nasdaq.com, www.sec.gov]
+    exchange_timezone: America/New_York
+    regular_close: "16:00"
   max_session_gap_weekdays: 5       # weekdays missing between consecutive bars
   min_adj_factor: 0.05
   adj_factor_tolerance: 0.000001

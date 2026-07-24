@@ -38,6 +38,13 @@ from smm.data.market_events import (
     VolumeSpikeVerification,
     match_market_event,
 )
+from smm.data.price_events import (
+    PriceEventSnapshot,
+    PriceJumpVerification,
+    SecurityIdentitySnapshot,
+    eligible_session,
+    match_price_event,
+)
 from smm.domain.models import Bar
 
 #: US equity session dates are Eastern. Deriving them from the runner's local
@@ -178,19 +185,72 @@ def _weekdays_between(start: date, end: date) -> int:
     return count
 
 
-def check_price_jumps(bars: Sequence[Bar], *, cfg: ValidationSection) -> None:
-    """Reject implausible single-session moves (§12.4 abnormal jumps).
-
-    A genuine 60% gap does happen; the point is that it must be looked at
-    rather than silently scored, so the run stops.
-    """
+def check_price_jumps(
+    bars: Sequence[Bar],
+    *,
+    cfg: ValidationSection,
+    calendar: Iterable[date] | None = None,
+    price_event_snapshot: PriceEventSnapshot | None = None,
+    identity_snapshot: SecurityIdentitySnapshot | None = None,
+) -> tuple[PriceJumpVerification, ...]:
+    """Reject implausible moves unless exact offline EDGAR evidence verifies them."""
+    records: list[PriceJumpVerification] = []
+    sessions = list(calendar) if calendar is not None else None
     for previous, current in zip(bars, bars[1:], strict=False):
         move = abs(current.close / previous.close - 1.0)
         if move > cfg.max_abs_daily_return:
-            _fail(
-                f"{current.symbol}: {current.date} moved {move:.1%} "
-                f"(limit {cfg.max_abs_daily_return:.0%}) — verify corporate actions"
+            if (
+                sessions is None
+                or price_event_snapshot is None
+                or identity_snapshot is None
+            ):
+                _fail(
+                    f"{current.symbol}: {current.date} moved {move:.1%} "
+                    f"(limit {cfg.max_abs_daily_return:.0%}) — verify corporate actions"
+                )
+            event, mapping = match_price_event(
+                price_event_snapshot,
+                identity_snapshot,
+                current_symbol=current.symbol,
+                jump_session=current.date,
+                calendar=sessions,
             )
+            records.append(
+                PriceJumpVerification(
+                    verification_kind="price_jump",
+                    symbol=current.symbol,
+                    historical_symbol=event.historical_symbol,
+                    session=current.date,
+                    previous_close=previous.close,
+                    raw_close=current.close,
+                    move=move,
+                    threshold=cfg.max_abs_daily_return,
+                    event_id=event.event_id,
+                    registrant_cik=event.registrant_cik,
+                    accession_number=event.accession_number,
+                    form=event.form,
+                    item_number=event.item_number,
+                    acceptance_datetime=event.acceptance_datetime,
+                    eligible_session=eligible_session(
+                        event.acceptance_datetime,
+                        sessions,
+                        exchange_timezone=price_event_snapshot.exchange_timezone,
+                        regular_close=price_event_snapshot.regular_close,
+                    ),
+                    source_url=event.source_url,
+                    price_event_snapshot_id=price_event_snapshot.snapshot_id,
+                    price_event_snapshot_sha256=price_event_snapshot.sha256,
+                    identity_mapping_id=(
+                        mapping.mapping_id if mapping is not None else None
+                    ),
+                    identity_source_url=(
+                        mapping.source_url if mapping is not None else None
+                    ),
+                    security_identity_snapshot_id=identity_snapshot.snapshot_id,
+                    security_identity_snapshot_sha256=identity_snapshot.sha256,
+                )
+            )
+    return tuple(records)
 
 
 def check_volume_anomalies(
@@ -319,20 +379,28 @@ def validate_bars(
     cfg: ValidationSection,
     calendar: Iterable[date] | None = None,
     event_snapshot: MarketEventSnapshot | None = None,
-) -> tuple[VolumeSpikeVerification, ...]:
+    price_event_snapshot: PriceEventSnapshot | None = None,
+    identity_snapshot: SecurityIdentitySnapshot | None = None,
+) -> tuple[PriceJumpVerification | VolumeSpikeVerification, ...]:
     """Run every §12.4 check. Raises on the first failure; never repairs."""
     sessions = list(calendar) if calendar is not None else None
     check_ordering_and_duplicates(bars)
     check_session_dates(bars, calendar=sessions)
     check_session_completeness(bars, calendar=sessions)
     check_session_continuity(bars, cfg=cfg)
-    check_price_jumps(bars, cfg=cfg)
     check_adj_factor(bars, cfg=cfg)
     check_split_artefacts(bars, cfg=cfg)
-    verifications = check_volume_anomalies(
+    price_verifications = check_price_jumps(
+        bars,
+        cfg=cfg,
+        calendar=sessions,
+        price_event_snapshot=price_event_snapshot,
+        identity_snapshot=identity_snapshot,
+    )
+    volume_verifications = check_volume_anomalies(
         bars,
         cfg=cfg,
         calendar=sessions,
         event_snapshot=event_snapshot,
     )
-    return verifications
+    return (*price_verifications, *volume_verifications)

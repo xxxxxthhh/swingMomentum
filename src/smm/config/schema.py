@@ -285,6 +285,38 @@ class VolumeSpikeVerificationSection(BaseModel):
         return self
 
 
+class PriceJumpVerificationSection(BaseModel):
+    """Frozen allowlist for offline EDGAR price-jump verification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy: Literal["edgar_8k_item_1_01_v1"]
+    allowed_forms: list[Literal["8-K"]]
+    allowed_items: list[Literal["1.01"]]
+    allowed_source_hosts: list[str]
+    allowed_identity_source_hosts: list[str]
+    exchange_timezone: Literal["America/New_York"]
+    regular_close: Literal["16:00"]
+
+    @model_validator(mode="after")
+    def exact_policy_catalog(self) -> PriceJumpVerificationSection:
+        if self.allowed_forms != ["8-K"]:
+            raise ValueError("price-jump allowed_forms must be exactly ['8-K']")
+        if self.allowed_items != ["1.01"]:
+            raise ValueError("price-jump allowed_items must be exactly ['1.01']")
+        if self.allowed_source_hosts != ["www.sec.gov"]:
+            raise ValueError(
+                "price-jump allowed_source_hosts must be exactly ['www.sec.gov']"
+            )
+        expected_identity_hosts = ["ir.echostar.com", "www.nasdaq.com", "www.sec.gov"]
+        if self.allowed_identity_source_hosts != expected_identity_hosts:
+            raise ValueError(
+                "price-jump allowed_identity_source_hosts must be exactly "
+                f"{expected_identity_hosts}"
+            )
+        return self
+
+
 class ValidationSection(BaseModel):
     """Data-quality thresholds (constitution §12.4).
 
@@ -299,6 +331,7 @@ class ValidationSection(BaseModel):
     max_abs_daily_return: float = Field(gt=0, le=10)
     max_volume_spike_ratio: float = Field(gt=1)
     volume_spike_verification: VolumeSpikeVerificationSection
+    price_jump_verification: PriceJumpVerificationSection
     max_session_gap_weekdays: int = Field(ge=0)
     min_adj_factor: float = Field(gt=0, le=1)
     adj_factor_tolerance: float = Field(gt=0, lt=1)

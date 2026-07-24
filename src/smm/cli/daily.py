@@ -296,7 +296,11 @@ def run_daily(
             | {etf.upper() for etf in loaded.config.sector_benchmarks.values()},
         )
         snapshot_bytes = snapshot_path(tmp_dir, session).read_bytes()
-        verification_text, market_event_snapshot = _market_data_evidence(provider)
+        (
+            verification_text,
+            market_event_snapshot,
+            market_data_snapshots,
+        ) = _market_data_evidence(provider)
         (tmp_dir / "market_data_verifications.json").write_text(
             verification_text,
             encoding="utf-8",
@@ -322,6 +326,7 @@ def run_daily(
                 "market_data_verifications": _sha256_text(verification_text),
             },
             market_event_snapshot=market_event_snapshot,
+            market_data_snapshots=market_data_snapshots,
         )
         manifest_text = render_manifest(manifest)
 
@@ -542,7 +547,11 @@ def _run_shadow_daily(
         snapshot_bytes = snapshot_path(tmp_dir, session).read_bytes()
         circuit_text = render_circuit_state_artifact(circuit_state)
         risk_text = render_risk_decisions_artifact(risk_decisions)
-        verification_text, market_event_snapshot = _market_data_evidence(provider)
+        (
+            verification_text,
+            market_event_snapshot,
+            market_data_snapshots,
+        ) = _market_data_evidence(provider)
         (tmp_dir / "market_data_verifications.json").write_text(
             verification_text,
             encoding="utf-8",
@@ -572,6 +581,7 @@ def _run_shadow_daily(
             artifact_hashes=artifact_hashes,
             circuit_state_identity=circuit_state_identity(circuit_state),
             market_event_snapshot=market_event_snapshot,
+            market_data_snapshots=market_data_snapshots,
         )
         manifest_text = render_manifest(manifest)
 
@@ -639,7 +649,11 @@ def _verify_shadow_artifacts(
 
 def _market_data_evidence(
     provider: _Provider,
-) -> tuple[str, dict[str, str] | None]:
+) -> tuple[
+    str,
+    dict[str, str] | None,
+    dict[str, dict[str, str]] | None,
+]:
     read_records = getattr(provider, "market_data_verifications", None)
     records = tuple(read_records()) if callable(read_records) else ()
     payloads = sorted(
@@ -652,11 +666,14 @@ def _market_data_evidence(
     )
     read_identity = getattr(provider, "market_event_snapshot_identity", None)
     identity = read_identity() if callable(read_identity) else None
+    read_identities = getattr(provider, "market_data_snapshot_identities", None)
+    identities = read_identities() if callable(read_identities) else None
     return (
         dump_json_deterministic(
             {"schema_version": 1, "verifications": payloads}
         ),
         identity,
+        identities or None,
     )
 
 

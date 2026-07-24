@@ -85,6 +85,7 @@ class VolumeSpikeVerification:
             "source_url": self.source_url,
             "symbol": self.symbol,
             "threshold": f"{self.threshold:.6f}",
+            "verification_kind": "volume_spike",
         }
 
 

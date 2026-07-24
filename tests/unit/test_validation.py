@@ -11,6 +11,10 @@ from smm.config.loader import load_config
 from smm.core.errors import DataValidationError, FailClosedError
 from smm.data.generator import breakout_success
 from smm.data.market_events import load_market_event_snapshot
+from smm.data.price_events import (
+    load_price_event_snapshot,
+    load_security_identity_snapshot,
+)
 from smm.data.validation import (
     EXCHANGE_TZ,
     check_adj_factor,
@@ -174,9 +178,66 @@ def test_abnormal_jump_rejected() -> None:
 
 
 def test_ordinary_move_accepted() -> None:
-    check_price_jumps(
+    assert check_price_jumps(
         [bar(date(2024, 6, 6), close=100), bar(date(2024, 6, 7), close=108)], cfg=CFG
+    ) == ()
+
+
+def test_echo_price_jump_is_verified_by_edgar_and_identity_snapshots() -> None:
+    event_snapshot = load_price_event_snapshot(
+        REPO / "configs" / "price_events",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.price_jump_verification,
     )
+    identity_snapshot = load_security_identity_snapshot(
+        REPO / "configs" / "security_identities",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.price_jump_verification,
+    )
+    bars = [
+        Bar(
+            symbol="ECHO",
+            date=date(2025, 8, 25),
+            open=29.950001,
+            high=30.070000,
+            low=29.340000,
+            close=29.879999,
+            volume=2_493_700,
+            adj_close=29.879999,
+            adj_factor=1.0,
+        ),
+        Bar(
+            symbol="ECHO",
+            date=date(2025, 8, 26),
+            open=54.110001,
+            high=55.189999,
+            low=50.619999,
+            close=50.869999,
+            volume=46_579_100,
+            adj_close=50.869999,
+            adj_factor=1.0,
+        ),
+    ]
+
+    records = check_price_jumps(
+        bars,
+        cfg=CFG,
+        calendar=[item.date for item in bars],
+        price_event_snapshot=event_snapshot,
+        identity_snapshot=identity_snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].verification_kind == "price_jump"
+    assert records[0].symbol == "ECHO"
+    assert records[0].historical_symbol == "SATS"
+    assert records[0].session == date(2025, 8, 26)
+    assert records[0].previous_close == 29.879999
+    assert records[0].raw_close == 50.869999
+    assert records[0].move == pytest.approx(0.7024766226)
+    assert records[0].threshold == 0.5
+    assert records[0].accession_number == "0001415404-25-000035"
+    assert records[0].identity_mapping_id == "echostar-sats-echo-2026-06-24"
 
 
 # --- 成交量异常 ------------------------------------------------------------

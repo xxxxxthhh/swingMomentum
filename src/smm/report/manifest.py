@@ -59,6 +59,7 @@ def build_manifest(
     transition_batch: dict[str, Any],
     artifact_hashes: dict[str, str],
     market_event_snapshot: Mapping[str, str] | None = None,
+    market_data_snapshots: Mapping[str, Mapping[str, str]] | None = None,
     execution_mode: ExecutionMode | str = ExecutionMode.MVP_A_SIGNAL,
 ) -> dict[str, Any]:
     """Assemble the manifest payload. No wall-clock, run id, or temp path
@@ -66,7 +67,7 @@ def build_manifest(
     not by a runtime check, so there is nothing here to accidentally leak.
     """
     selected_mode = _execution_mode(execution_mode)
-    return {
+    manifest = {
         "as_of": as_of.isoformat(),
         "strategy_version": strategy_version,
         "config_hash": config_hash,
@@ -86,6 +87,11 @@ def build_manifest(
             "conditionally_excluded_fields": list(CONDITIONALLY_EXCLUDED_FIELDS),
         },
     }
+    if market_data_snapshots:
+        manifest["market_data_snapshots"] = _validated_market_data_snapshots(
+            market_data_snapshots
+        )
+    return manifest
 
 
 def build_shadow_manifest(
@@ -101,6 +107,7 @@ def build_shadow_manifest(
     artifact_hashes: Mapping[str, object],
     circuit_state_identity: object,
     market_event_snapshot: Mapping[str, str] | None = None,
+    market_data_snapshots: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the strict, pure M7 shadow-manifest payload.
 
@@ -120,6 +127,7 @@ def build_shadow_manifest(
         artifact_hashes=_validated_shadow_artifact_hashes(artifact_hashes),
         execution_mode=ExecutionMode.SHADOW,
         market_event_snapshot=market_event_snapshot,
+        market_data_snapshots=market_data_snapshots,
     )
     manifest["circuit_state_identity"] = _validated_sha256(
         circuit_state_identity,
@@ -177,4 +185,20 @@ def _validated_market_event_snapshot(value: Mapping[str, str]) -> dict[str, str]
             value["sha256"],
             label="market_event_snapshot sha256",
         ),
+    }
+
+
+def _validated_market_data_snapshots(
+    value: Mapping[str, Mapping[str, str]],
+) -> dict[str, dict[str, str]]:
+    if not isinstance(value, Mapping) or not value:
+        raise DataValidationError("market_data_snapshots must be a non-empty mapping")
+    allowed = {"price_event", "security_identity", "volume_event"}
+    if not set(value).issubset(allowed):
+        raise DataValidationError(
+            "market_data_snapshots contains an unsupported snapshot kind"
+        )
+    return {
+        kind: _validated_market_event_snapshot(identity)
+        for kind, identity in sorted(value.items())
     }

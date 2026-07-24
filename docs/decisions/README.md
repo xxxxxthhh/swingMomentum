@@ -19,5 +19,6 @@
 - [2026-07-22_m6_paper_broker_contract.md](./2026-07-22_m6_paper_broker_contract.md)（accepted；rev.2）— M6 true-print、Paper Broker、退出、人工 SKIP 与熔断契约
 - [2026-07-23_m7_daily_orchestration_and_audit_contract.md](./2026-07-23_m7_daily_orchestration_and_audit_contract.md)（accepted；rev.6）— M7 单 CLI 日序、延后风险评估、CircuitState digest、mode-aware artifact bundle、trigger-backlog expiry guardrail、shadow external `PortfolioSnapshot` audit basis 与 strict shadow manifest assembly
 - [2026-07-24_market_data_retry_and_reconciliation_gates.md](./2026-07-24_market_data_retry_and_reconciliation_gates.md)（accepted；PR #74）— 行情供应商短时重试、整轮 fail-closed、人工延迟重跑与 Stage C 双源对账门槛
+- [2026-07-24_index_change_volume_spike_verification.md](./2026-07-24_index_change_volume_spike_verification.md)（proposed；Issue #77）— 用版本化的 S&P 官方成分变更事实确定性验证生效前一交易日或生效日的极端成交量；缺失或冲突仍整轮 fail-closed
 
 被替代的决策不要删除，标记 `superseded` 并链接新文档；部分条款修订可在旧文标注并指向新 ADR。

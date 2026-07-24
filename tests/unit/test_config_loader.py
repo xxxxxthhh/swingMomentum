@@ -14,7 +14,7 @@ from smm.core.errors import ConfigError
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = REPO / "configs" / "smm_v1_0_0.yaml"
 M6_YAML = REPO / "configs" / "smm_v1_1_0.yaml"
-V1_0_CONFIG_HASH = "8fe69452ca42d1b8effb7221d6c07ddd067e10739e2338dcd51034e35bb836ef"
+V1_0_CONFIG_HASH = "4d9e51a0fb38a1747e4a251c48097b9431b9a0f9fe2af4c835518f8cbead982a"
 
 
 def _m6_mapping() -> dict:
@@ -46,6 +46,8 @@ def test_load_default_config() -> None:
     assert loaded.config.scoring.fund_as_filter is True
     assert loaded.config.scoring.fundamental_weight == 0.0
     assert loaded.config.risk.new_entries_enabled is True
+    assert loaded.config.market_data_retry.max_attempts == 3
+    assert loaded.config.market_data_retry.backoff_seconds == [2.0, 8.0]
     assert len(loaded.config_hash) == 64
     assert all(c in "0123456789abcdef" for c in loaded.config_hash)
 
@@ -59,6 +61,24 @@ def test_config_hash_stable() -> None:
 
 def test_v1_0_hash_remains_the_frozen_identity() -> None:
     assert load_config(DEFAULT_YAML).config_hash == V1_0_CONFIG_HASH
+
+
+def test_market_data_retry_backoff_count_matches_attempts() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    raw["market_data_retry"]["backoff_seconds"] = [2]
+
+    with pytest.raises(ConfigError, match="must contain exactly 2 values"):
+        load_config_from_mapping(raw)
+
+
+def test_market_data_retry_policy_changes_config_hash_without_version_bump() -> None:
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    original = load_config_from_mapping(raw)
+    raw["market_data_retry"]["backoff_seconds"] = [3, 8]
+    changed = load_config_from_mapping(raw)
+
+    assert changed.version == original.version
+    assert changed.config_hash != original.config_hash
 
 
 def test_load_v1_1_config_freezes_m6_cost_and_circuit_values() -> None:

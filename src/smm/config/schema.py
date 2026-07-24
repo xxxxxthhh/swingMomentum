@@ -38,6 +38,28 @@ class UniverseSection(BaseModel):
     max_snapshot_age_days: int = Field(gt=0)
 
 
+class MarketDataRetrySection(BaseModel):
+    """Finite, deterministic provider retry policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_attempts: int = Field(ge=1)
+    backoff_seconds: list[float]
+
+    @model_validator(mode="after")
+    def one_backoff_per_retry(self) -> MarketDataRetrySection:
+        expected = self.max_attempts - 1
+        if len(self.backoff_seconds) != expected:
+            msg = (
+                "market_data_retry.backoff_seconds must contain exactly "
+                f"{expected} values for max_attempts={self.max_attempts}"
+            )
+            raise ValueError(msg)
+        if any(value < 0 for value in self.backoff_seconds):
+            raise ValueError("market_data_retry.backoff_seconds must be non-negative")
+        return self
+
+
 class MarketRegimeSection(BaseModel):
     """Market regime inputs (constitution §14).
 
@@ -312,6 +334,7 @@ class StrategyConfig(BaseModel):
 
     strategy: StrategySection
     universe: UniverseSection
+    market_data_retry: MarketDataRetrySection
     validation: ValidationSection
     features: FeaturesSection
     sector_benchmarks: dict[str, str]

@@ -157,6 +157,9 @@ def _ingest_market(
     security_identities_dir = (
         Path(__file__).resolve().parents[3] / "configs" / "security_identities"
     )
+    official_bar_supplements_dir = (
+        Path(__file__).resolve().parents[3] / "configs" / "official_bar_supplements"
+    )
     provider = YFinanceProvider(
         cache_dir=cache_dir,
         universe_dir=universe_dir,
@@ -166,6 +169,7 @@ def _ingest_market(
         market_events_dir=market_events_dir,
         price_events_dir=price_events_dir,
         security_identities_dir=security_identities_dir,
+        official_bar_supplements_dir=official_bar_supplements_dir,
         attempt_logger=_market_data_attempt_log,
         # Must be passed, not left to the default: otherwise ingest fetches the
         # configured benchmark while get_calendar keeps reading SPY, and the two
@@ -266,6 +270,11 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
         security_identities_dir = (
             Path(__file__).resolve().parents[3] / "configs" / "security_identities"
         )
+        official_bar_supplements_dir = (
+            Path(__file__).resolve().parents[3]
+            / "configs"
+            / "official_bar_supplements"
+        )
         snapshot = load_universe(
             universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
         )
@@ -280,6 +289,7 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
             market_events_dir=market_events_dir,
             price_events_dir=price_events_dir,
             security_identities_dir=security_identities_dir,
+            official_bar_supplements_dir=official_bar_supplements_dir,
             attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )
@@ -407,6 +417,11 @@ def _execute_run_daily(
         security_identities_dir = (
             Path(__file__).resolve().parents[3] / "configs" / "security_identities"
         )
+        official_bar_supplements_dir = (
+            Path(__file__).resolve().parents[3]
+            / "configs"
+            / "official_bar_supplements"
+        )
         snapshot = load_universe(
             universe_dir, session, max_age_days=loaded.config.universe.max_snapshot_age_days
         )
@@ -421,6 +436,7 @@ def _execute_run_daily(
             market_events_dir=market_events_dir,
             price_events_dir=price_events_dir,
             security_identities_dir=security_identities_dir,
+            official_bar_supplements_dir=official_bar_supplements_dir,
             attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )

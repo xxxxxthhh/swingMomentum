@@ -193,7 +193,12 @@ def _validated_market_data_snapshots(
 ) -> dict[str, dict[str, str]]:
     if not isinstance(value, Mapping) or not value:
         raise DataValidationError("market_data_snapshots must be a non-empty mapping")
-    allowed = {"price_event", "security_identity", "volume_event"}
+    allowed = {
+        "official_bar_supplement",
+        "price_event",
+        "security_identity",
+        "volume_event",
+    }
     if not set(value).issubset(allowed):
         raise DataValidationError(
             "market_data_snapshots contains an unsupported snapshot kind"

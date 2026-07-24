@@ -262,26 +262,37 @@ class VolumeSpikeVerificationSection(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    policy: Literal["official_sp500_constituent_change_v1"]
-    allowed_indexes: list[Literal["S&P 500"]]
+    policy: Literal["official_sp500_nasdaq100_constituent_change_v2"]
+    allowed_indexes: list[Literal["S&P 500", "Nasdaq-100"]]
     allowed_actions: list[Literal["addition", "deletion"]]
     session_offsets: list[Literal[-1, 0]]
-    allowed_source_hosts: list[str]
+    allowed_source_hosts_by_index: dict[
+        Literal["S&P 500", "Nasdaq-100"],
+        list[str],
+    ]
 
     @model_validator(mode="after")
     def exact_policy_catalog(self) -> VolumeSpikeVerificationSection:
-        if self.allowed_indexes != ["S&P 500"]:
-            raise ValueError("volume-spike allowed_indexes must be exactly ['S&P 500']")
+        expected_indexes = ["S&P 500", "Nasdaq-100"]
+        if self.allowed_indexes != expected_indexes:
+            raise ValueError(
+                f"volume-spike allowed_indexes must be exactly {expected_indexes}"
+            )
         if self.allowed_actions != ["addition", "deletion"]:
             raise ValueError(
                 "volume-spike allowed_actions must be exactly ['addition', 'deletion']"
             )
         if self.session_offsets != [-1, 0]:
             raise ValueError("volume-spike session_offsets must be exactly [-1, 0]")
-        if not self.allowed_source_hosts or len(set(self.allowed_source_hosts)) != len(
-            self.allowed_source_hosts
-        ):
-            raise ValueError("volume-spike source hosts must be non-empty and unique")
+        expected_hosts = {
+            "S&P 500": ["press.spglobal.com", "www.spglobal.com"],
+            "Nasdaq-100": ["ir.nasdaq.com", "www.nasdaq.com"],
+        }
+        if self.allowed_source_hosts_by_index != expected_hosts:
+            raise ValueError(
+                "volume-spike allowed_source_hosts_by_index must be exactly "
+                f"{expected_hosts}"
+            )
         return self
 
 
@@ -317,6 +328,32 @@ class PriceJumpVerificationSection(BaseModel):
         return self
 
 
+class OfficialBarSupplementSection(BaseModel):
+    """Frozen offline policy for one exact official-exchange provider hole."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy: Literal["official_exchange_isolated_missing_bar_v1"]
+    max_missing_sessions_per_symbol: Literal[1]
+    allowed_bar_source_hosts: list[str]
+    allowed_identity_source_hosts: list[str]
+    adjustment_method: Literal["adjacent_provider_equal_close_v1"]
+
+    @model_validator(mode="after")
+    def exact_policy_catalog(self) -> OfficialBarSupplementSection:
+        if self.allowed_bar_source_hosts != ["api.nasdaq.com"]:
+            raise ValueError(
+                "official-bar allowed_bar_source_hosts must be exactly "
+                "['api.nasdaq.com']"
+            )
+        if self.allowed_identity_source_hosts != ["www.sec.gov"]:
+            raise ValueError(
+                "official-bar allowed_identity_source_hosts must be exactly "
+                "['www.sec.gov']"
+            )
+        return self
+
+
 class ValidationSection(BaseModel):
     """Data-quality thresholds (constitution §12.4).
 
@@ -332,6 +369,7 @@ class ValidationSection(BaseModel):
     max_volume_spike_ratio: float = Field(gt=1)
     volume_spike_verification: VolumeSpikeVerificationSection
     price_jump_verification: PriceJumpVerificationSection
+    official_bar_supplement: OfficialBarSupplementSection
     max_session_gap_weekdays: int = Field(ge=0)
     min_adj_factor: float = Field(gt=0, le=1)
     adj_factor_tolerance: float = Field(gt=0, lt=1)

@@ -56,6 +56,12 @@ from smm.data.market_events import (
     VolumeSpikeVerification,
     load_market_event_snapshot,
 )
+from smm.data.official_bar_supplements import (
+    OfficialBarSupplementVerification,
+    load_official_bar_supplement_snapshot,
+    official_bar_supplement_snapshot_is_visible,
+    reconcile_official_bar_supplements,
+)
 from smm.data.price_events import (
     PriceJumpVerification,
     load_price_event_snapshot,
@@ -96,6 +102,7 @@ class YFinanceProvider:
         market_events_dir: Path | str | None = None,
         price_events_dir: Path | str | None = None,
         security_identities_dir: Path | str | None = None,
+        official_bar_supplements_dir: Path | str | None = None,
         benchmark: str = "SPY",
         sleeper: Callable[[float], None] = time.sleep,
         attempt_logger: Callable[[str], None] | None = None,
@@ -117,6 +124,11 @@ class YFinanceProvider:
             if security_identities_dir is not None
             else None
         )
+        self._official_bar_supplements_dir = (
+            Path(official_bar_supplements_dir)
+            if official_bar_supplements_dir is not None
+            else None
+        )
         self._sleeper = sleeper
         self._attempt_logger = attempt_logger
         self._volume_verifications: dict[
@@ -124,6 +136,9 @@ class YFinanceProvider:
         ] = {}
         self._price_verifications: dict[
             tuple[str, date, str], PriceJumpVerification
+        ] = {}
+        self._official_bar_supplement_verifications: dict[
+            tuple[str, date, str], OfficialBarSupplementVerification
         ] = {}
 
     # -- DataProvider ----------------------------------------------------
@@ -137,7 +152,7 @@ class YFinanceProvider:
     def get_daily_bars(self, symbol: str, start: date, end: date) -> Sequence[Bar]:
         if cache.covers(self._cache_dir, symbol, start, end):
             bars = cache.read_bars(self._cache_dir, symbol, start, end)
-            self._validate_and_collect(
+            bars = self._validate_and_collect(
                 bars,
                 calendar=self._calendar_for(symbol, start, end),
                 as_of=end,
@@ -151,21 +166,31 @@ class YFinanceProvider:
 
     def market_data_verifications(
         self,
-    ) -> tuple[PriceJumpVerification | VolumeSpikeVerification, ...]:
+    ) -> tuple[
+        OfficialBarSupplementVerification
+        | PriceJumpVerification
+        | VolumeSpikeVerification,
+        ...,
+    ]:
         """Deterministic evidence accumulated by all validated provider reads."""
         price = tuple(
             self._price_verifications[key]
             for key in sorted(self._price_verifications)
         )
+        supplements = tuple(
+            self._official_bar_supplement_verifications[key]
+            for key in sorted(self._official_bar_supplement_verifications)
+        )
         volume = tuple(
             self._volume_verifications[key]
             for key in sorted(self._volume_verifications)
         )
-        return (*price, *volume)
+        return (*supplements, *price, *volume)
 
     def reset_market_data_verifications(self) -> None:
         """Begin a new daily evidence scope without changing cached market data."""
         self._price_verifications.clear()
+        self._official_bar_supplement_verifications.clear()
         self._volume_verifications.clear()
 
     def market_event_snapshot_identity(self) -> dict[str, str] | None:
@@ -200,7 +225,12 @@ class YFinanceProvider:
             (record.snapshot_id, record.snapshot_sha256)
             for record in self._volume_verifications.values()
         }
+        official_bars = {
+            (record.snapshot_id, record.snapshot_sha256)
+            for record in self._official_bar_supplement_verifications.values()
+        }
         for label, identities in (
+            ("official_bar_supplement", official_bars),
             ("price_event", price_events),
             ("security_identity", security_identities),
             ("volume_event", volume_events),
@@ -361,7 +391,7 @@ class YFinanceProvider:
                 "provider_normalization", f"{type(exc).__name__}: {exc}"
             ) from exc
         try:
-            self._validate_and_collect(bars, calendar=calendar, as_of=end)
+            bars = self._validate_and_collect(bars, calendar=calendar, as_of=end)
         except DataValidationError as exc:
             raise _RetryableProviderError(
                 "provider_validation", f"{type(exc).__name__}: {exc}"
@@ -374,14 +404,44 @@ class YFinanceProvider:
         *,
         calendar: list[date] | None,
         as_of: date,
-    ) -> None:
+    ) -> list[Bar]:
+        reconciled = list(bars)
+        supplement_records: tuple[OfficialBarSupplementVerification, ...] = ()
+        if (
+            self._official_bar_supplements_dir is not None
+            and official_bar_supplement_snapshot_is_visible(
+                self._official_bar_supplements_dir,
+                as_of=as_of,
+            )
+        ):
+            supplement_snapshot = load_official_bar_supplement_snapshot(
+                self._official_bar_supplements_dir,
+                as_of=as_of,
+                cfg=self._validation.official_bar_supplement,
+            )
+            reconciled, supplement_records = reconcile_official_bar_supplements(
+                reconciled,
+                calendar=calendar,
+                snapshot=supplement_snapshot,
+                cfg=self._validation.official_bar_supplement,
+            )
+        for record in supplement_records:
+            key = (record.symbol, record.session, record.event_id)
+            prior = self._official_bar_supplement_verifications.get(key)
+            if prior is not None and prior != record:
+                raise DataValidationError(
+                    f"{record.symbol}: conflicting official-bar supplement evidence "
+                    f"for {record.session}"
+                )
+            self._official_bar_supplement_verifications[key] = record
+
         volume_snapshot = None
         price_snapshot = None
         identity_snapshot = None
         has_jump = any(
             abs(current.close / previous.close - 1.0)
             > self._validation.max_abs_daily_return
-            for previous, current in zip(bars, bars[1:], strict=False)
+            for previous, current in zip(reconciled, reconciled[1:], strict=False)
         )
         if has_jump:
             if self._price_events_dir is None or self._security_identities_dir is None:
@@ -399,12 +459,12 @@ class YFinanceProvider:
                 as_of=as_of,
                 cfg=self._validation.price_jump_verification,
             )
-        volumes = sorted(bar.volume for bar in bars)
+        volumes = sorted(bar.volume for bar in reconciled)
         if volumes:
             median = volumes[len(volumes) // 2]
             has_spike = median > 0 and any(
                 bar.volume / median > self._validation.max_volume_spike_ratio
-                for bar in bars
+                for bar in reconciled
             )
             if has_spike:
                 if self._market_events_dir is None:
@@ -417,7 +477,7 @@ class YFinanceProvider:
                     cfg=self._validation.volume_spike_verification,
                 )
         records = validate_bars(
-            bars,
+            reconciled,
             cfg=self._validation,
             calendar=calendar,
             event_snapshot=volume_snapshot,
@@ -438,6 +498,7 @@ class YFinanceProvider:
                     f"for {record.session}"
                 )
             target[key] = record
+        return reconciled
 
     def _log_attempt(
         self,

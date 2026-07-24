@@ -89,6 +89,108 @@ def test_recorded_coverage_is_served_without_fetching(tmp_path: Path) -> None:
     assert [b.date for b in served] == [b.date for b in bars[10:21]]
 
 
+def test_cached_fisv_hole_is_repaired_and_replayed_with_official_evidence(
+    tmp_path: Path,
+) -> None:
+    days = [date(2025, 11, 11), date(2025, 11, 12), date(2025, 11, 13)]
+    evidence_as_of = date(2026, 7, 23)
+
+    def make(symbol: str, session: date, close: float, volume: float) -> Bar:
+        return Bar(
+            symbol=symbol,
+            date=session,
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=volume,
+            adj_close=close,
+            adj_factor=1.0,
+        )
+
+    spy = [make("SPY", session, 100.0, 1_000_000) for session in days]
+    fisv = [
+        make("FISV", days[0], 64.26000213623047, 5_427_200),
+        make("FISV", days[2], 64.52999877929688, 9_274_500),
+    ]
+    cache.write_bars(
+        tmp_path / "cache",
+        "SPY",
+        spy,
+        requested=(days[0], evidence_as_of),
+    )
+    cache.write_bars(
+        tmp_path / "cache",
+        "FISV",
+        fisv,
+        requested=(days[0], evidence_as_of),
+    )
+    provider = YFinanceProvider(
+        cache_dir=tmp_path / "cache",
+        universe_dir=REPO / "configs" / "universe",
+        validation=CONFIG.validation,
+        retry=CONFIG.market_data_retry,
+        max_snapshot_age_days=CONFIG.universe.max_snapshot_age_days,
+        market_events_dir=REPO / "configs" / "market_events",
+        price_events_dir=REPO / "configs" / "price_events",
+        security_identities_dir=REPO / "configs" / "security_identities",
+        official_bar_supplements_dir=REPO / "configs" / "official_bar_supplements",
+    )
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
+
+    repaired = provider.get_daily_bars("FISV", days[0], evidence_as_of)
+
+    assert [bar.date for bar in repaired] == days
+    payloads = [record.to_payload() for record in provider.market_data_verifications()]
+    assert payloads[0]["verification_kind"] == "official_bar_supplement"
+    assert payloads[0]["raw_close"] == "64.380000"
+    assert provider.market_data_snapshot_identities()["official_bar_supplement"] == {
+        "id": "2026-07-23_official_bar_supplements",
+        "sha256": payloads[0]["snapshot_sha256"],
+    }
+
+
+def test_run_before_first_official_bar_snapshot_does_not_require_future_evidence(
+    tmp_path: Path,
+) -> None:
+    days = [date(2025, 1, 2), date(2025, 1, 3)]
+    bars = [
+        Bar(
+            symbol=symbol,
+            date=session,
+            open=100,
+            high=100,
+            low=100,
+            close=100,
+            volume=1_000_000,
+            adj_close=100,
+            adj_factor=1,
+        )
+        for symbol in ("SPY", "NVDA")
+        for session in days
+    ]
+    for symbol in ("SPY", "NVDA"):
+        symbol_bars = [bar for bar in bars if bar.symbol == symbol]
+        cache.write_bars(
+            tmp_path / "cache",
+            symbol,
+            symbol_bars,
+            requested=(days[0], days[-1]),
+        )
+    provider = YFinanceProvider(
+        cache_dir=tmp_path / "cache",
+        universe_dir=REPO / "configs" / "universe",
+        validation=CONFIG.validation,
+        retry=CONFIG.market_data_retry,
+        max_snapshot_age_days=CONFIG.universe.max_snapshot_age_days,
+        official_bar_supplements_dir=REPO / "configs" / "official_bar_supplements",
+    )
+    provider.fetch = _never_fetch  # type: ignore[method-assign]
+
+    assert [bar.date for bar in provider.get_daily_bars("NVDA", days[0], days[-1])] == days
+    assert provider.market_data_verifications() == ()
+
+
 def test_cached_casy_spike_reproduces_the_same_official_evidence(
     tmp_path: Path,
 ) -> None:
@@ -151,6 +253,74 @@ def test_cached_casy_spike_reproduces_the_same_official_evidence(
     second.get_daily_bars("CASY", days[0], days[-1])
 
     assert [record.to_payload() for record in second.market_data_verifications()] == first_payload
+    assert second.market_event_snapshot_identity() == first.market_event_snapshot_identity()
+
+
+def test_cached_fer_spike_reproduces_nasdaq100_official_evidence(
+    tmp_path: Path,
+) -> None:
+    days = [
+        date(2025, 12, 9),
+        date(2025, 12, 10),
+        date(2025, 12, 11),
+        date(2025, 12, 12),
+        date(2025, 12, 15),
+        date(2025, 12, 16),
+        date(2025, 12, 17),
+        date(2025, 12, 18),
+        date(2025, 12, 19),
+    ]
+    volumes = [
+        900_000,
+        950_000,
+        1_000_000,
+        1_050_000,
+        1_072_900,
+        1_100_000,
+        2_688_300,
+        3_320_700,
+        62_023_100,
+    ]
+    evidence_as_of = date(2026, 7, 23)
+
+    def make(symbol: str, session: date, volume: float) -> Bar:
+        return Bar(
+            symbol=symbol,
+            date=session,
+            open=100,
+            high=101,
+            low=99,
+            close=100,
+            volume=volume,
+            adj_close=100,
+            adj_factor=1,
+        )
+
+    fer = [
+        make("FER", session, volume)
+        for session, volume in zip(days, volumes, strict=True)
+    ]
+    spy = [make("SPY", session, 1_000_000) for session in days]
+    for symbol, bars in (("SPY", spy), ("FER", fer)):
+        cache.write_bars(
+            tmp_path / "cache",
+            symbol,
+            bars,
+            requested=(days[0], evidence_as_of),
+        )
+
+    first = build(tmp_path)
+    first.fetch = _never_fetch  # type: ignore[method-assign]
+    first.get_daily_bars("FER", days[0], evidence_as_of)
+    first_payload = [record.to_payload() for record in first.market_data_verifications()]
+
+    second = build(tmp_path)
+    second.fetch = _never_fetch  # type: ignore[method-assign]
+    second.get_daily_bars("FER", days[0], evidence_as_of)
+
+    assert [record.to_payload() for record in second.market_data_verifications()] == first_payload
+    assert first_payload[0]["index_name"] == "Nasdaq-100"
+    assert first_payload[0]["raw_volume"] == "62023100.000000"
     assert second.market_event_snapshot_identity() == first.market_event_snapshot_identity()
 
 

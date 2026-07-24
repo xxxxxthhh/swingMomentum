@@ -378,7 +378,89 @@ def test_crh_t_minus_one_volume_spike_uses_canonical_snapshot() -> None:
     assert records[0].raw_volume == 140_096_300
     assert records[0].median_volume == 4_229_700
     assert records[0].ratio == pytest.approx(33.1220417524)
-    assert records[0].snapshot_id == "2026-07-23_sp500_constituent_changes"
+    assert records[0].snapshot_id == "2026-07-23_index_constituent_changes"
+
+
+def test_eme_t_minus_one_volume_spike_uses_canonical_snapshot() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(9, start=date(2025, 9, 9), symbol="EME")
+    bars = [
+        bar(item.date, symbol="EME", volume=volume)
+        for item, volume in zip(
+            bars,
+            [
+                340_000,
+                350_000,
+                360_000,
+                365_000,
+                368_300,
+                381_600,
+                706_300,
+                837_700,
+                10_505_000,
+            ],
+            strict=True,
+        )
+    ]
+
+    records = check_volume_anomalies(
+        bars,
+        cfg=CFG,
+        calendar=[item.date for item in bars],
+        event_snapshot=snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].symbol == "EME"
+    assert records[0].session == date(2025, 9, 19)
+    assert records[0].effective_date == date(2025, 9, 22)
+    assert records[0].raw_volume == 10_505_000
+    assert records[0].median_volume == 368_300
+    assert records[0].ratio == pytest.approx(28.5229432528)
+
+
+def test_fer_t_minus_one_volume_spike_uses_nasdaq100_official_event() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(9, start=date(2025, 12, 9), symbol="FER")
+    volumes = [
+        900_000,
+        950_000,
+        1_000_000,
+        1_050_000,
+        1_072_900,
+        1_100_000,
+        2_688_300,
+        3_320_700,
+        62_023_100,
+    ]
+    bars = [
+        bar(item.date, symbol="FER", volume=volume)
+        for item, volume in zip(bars, volumes, strict=True)
+    ]
+
+    records = check_volume_anomalies(
+        bars,
+        cfg=CFG,
+        calendar=[item.date for item in bars] + [date(2025, 12, 22)],
+        event_snapshot=snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].symbol == "FER"
+    assert records[0].session == date(2025, 12, 19)
+    assert records[0].effective_date == date(2025, 12, 22)
+    assert records[0].index_name == "Nasdaq-100"
+    assert records[0].raw_volume == 62_023_100
+    assert records[0].median_volume == 1_072_900
+    assert records[0].ratio == pytest.approx(57.8088358654)
 
 
 def test_verified_event_outside_t_minus_one_or_t_window_is_rejected() -> None:

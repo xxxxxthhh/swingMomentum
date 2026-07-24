@@ -92,12 +92,20 @@ def test_manifest_binds_all_market_data_snapshot_identities() -> None:
         },
         artifact_hashes={"report_csv": "aaa", "report_markdown": "bbb"},
         market_data_snapshots={
+            "official_bar_supplement": {
+                "id": "official-bars",
+                "sha256": "c" * 64,
+            },
             "price_event": {"id": "events", "sha256": "a" * 64},
             "security_identity": {"id": "identities", "sha256": "b" * 64},
         },
     )
 
     assert manifest["market_data_snapshots"] == {
+        "official_bar_supplement": {
+            "id": "official-bars",
+            "sha256": "c" * 64,
+        },
         "price_event": {"id": "events", "sha256": "a" * 64},
         "security_identity": {"id": "identities", "sha256": "b" * 64},
     }

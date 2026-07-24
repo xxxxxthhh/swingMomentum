@@ -31,11 +31,13 @@ validation:
   max_abs_daily_return: 0.50        # |close/prev_close - 1| above this stops the run
   max_volume_spike_ratio: 25.0      # vs the series median
   volume_spike_verification:
-    policy: official_sp500_constituent_change_v1
-    allowed_indexes: ["S&P 500"]
+    policy: official_sp500_nasdaq100_constituent_change_v2
+    allowed_indexes: ["S&P 500", "Nasdaq-100"]
     allowed_actions: [addition, deletion]
     session_offsets: [-1, 0]
-    allowed_source_hosts: [press.spglobal.com, www.spglobal.com]
+    allowed_source_hosts_by_index:
+      "S&P 500": [press.spglobal.com, www.spglobal.com]
+      "Nasdaq-100": [ir.nasdaq.com, www.nasdaq.com]
   price_jump_verification:
     policy: edgar_8k_item_1_01_v1
     allowed_forms: ["8-K"]
@@ -44,6 +46,12 @@ validation:
     allowed_identity_source_hosts: [ir.echostar.com, www.nasdaq.com, www.sec.gov]
     exchange_timezone: America/New_York
     regular_close: "16:00"
+  official_bar_supplement:
+    policy: official_exchange_isolated_missing_bar_v1
+    max_missing_sessions_per_symbol: 1
+    allowed_bar_source_hosts: [api.nasdaq.com]
+    allowed_identity_source_hosts: [www.sec.gov]
+    adjustment_method: adjacent_provider_equal_close_v1
   max_session_gap_weekdays: 5       # weekdays missing between consecutive bars
   min_adj_factor: 0.05
   adj_factor_tolerance: 0.000001

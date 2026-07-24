@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from smm.cli.main import app
 from smm.config.loader import load_config
+from smm.core.errors import DataValidationError
 from smm.data.generator import synthetic_universe
 
 runner = CliRunner()
@@ -66,6 +67,51 @@ def test_fail_closed_run_exits_nonzero_and_leaves_no_manifest(tmp_path: Path) ->
     assert result.exit_code == 1, result.output
     assert "fail-closed" in result.output
     root = tmp_path / "runs" / CONFIG.version / CONFIG.config_hash / backfill_day.isoformat()
+    assert not (root / "manifest.json").exists()
+    assert not root.exists()
+
+
+def test_exhausted_market_provider_leaves_no_completion_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import smm.data.yfinance_provider as provider_module
+
+    class ExhaustedProvider:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        def get_daily_bars(self, symbol, start, end):
+            raise DataValidationError(
+                f"{symbol}: provider attempts exhausted; attempts: "
+                "1/provider_empty | 2/provider_empty | 3/provider_empty"
+            )
+
+        def get_calendar(self, start, end):
+            raise DataValidationError(
+                "SPY: provider attempts exhausted; attempts: "
+                "1/provider_empty | 2/provider_empty | 3/provider_empty"
+            )
+
+    monkeypatch.setattr(provider_module, "YFinanceProvider", ExhaustedProvider)
+    as_of = date(2026, 7, 23)
+    result = runner.invoke(
+        app,
+        [
+            "run-daily",
+            "--source",
+            "market",
+            "--as-of",
+            as_of.isoformat(),
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "provider attempts exhausted" in result.output
+    root = tmp_path / "runs" / CONFIG.version / CONFIG.config_hash / as_of.isoformat()
     assert not (root / "manifest.json").exists()
     assert not root.exists()
 

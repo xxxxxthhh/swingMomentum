@@ -39,18 +39,32 @@ treat it as audit-grade truth for cross-split long-window backtests.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import json
+import logging
+import time
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from smm.config.schema import ValidationSection
+from smm.config.schema import MarketDataRetrySection, ValidationSection
 from smm.core.errors import DataValidationError
 from smm.data import cache
 from smm.data.universe import load_universe
 from smm.data.validation import to_session_date, validate_bars
 from smm.domain.models import Bar
 from smm.paper.prints import SplitAction, SplitActionHistory
+
+LOGGER = logging.getLogger(__name__)
+
+
+class _RetryableProviderError(Exception):
+    """One retryable provider attempt failure with a stable operator category."""
+
+    def __init__(self, category: str, detail: str) -> None:
+        super().__init__(detail)
+        self.category = category
+        self.detail = detail
 
 
 class YFinanceProvider:
@@ -66,14 +80,20 @@ class YFinanceProvider:
         cache_dir: Path | str,
         universe_dir: Path | str,
         validation: ValidationSection,
+        retry: MarketDataRetrySection,
         max_snapshot_age_days: int,
         benchmark: str = "SPY",
+        sleeper: Callable[[float], None] = time.sleep,
+        attempt_logger: Callable[[str], None] | None = None,
     ) -> None:
         self._cache_dir = Path(cache_dir)
         self._universe_dir = Path(universe_dir)
         self._validation = validation
+        self._retry = retry
         self._max_snapshot_age_days = max_snapshot_age_days
         self._benchmark = benchmark.upper()
+        self._sleeper = sleeper
+        self._attempt_logger = attempt_logger
 
     # -- DataProvider ----------------------------------------------------
 
@@ -146,7 +166,13 @@ class YFinanceProvider:
         *,
         calendar: list[date] | None = None,
     ) -> list[Bar]:
-        """Download, normalise and validate. Raises rather than returning partial data."""
+        """Download, normalise and validate with finite provider-boundary retries."""
+        if calendar is not None and not calendar:
+            raise DataValidationError(
+                "empty trading calendar: the benchmark has no cached sessions in "
+                "this window — provider retries cannot establish which member "
+                "sessions are valid"
+            )
         try:
             import yfinance  # noqa: PLC0415
         except ImportError as exc:  # pragma: no cover - depends on extras
@@ -154,27 +180,117 @@ class YFinanceProvider:
                 "yfinance is not installed; install the market extra: pip install -e '.[market]'"
             ) from exc
 
-        frame = yfinance.download(
-            symbol,
-            start=start.isoformat(),
-            # yfinance treats `end` as exclusive.
-            end=(end + timedelta(days=1)).isoformat(),
-            auto_adjust=False,
-            actions=False,
-            progress=False,
-            threads=False,
-        )
-        if frame is None or frame.empty:
-            raise DataValidationError(
-                f"{symbol}: provider returned no rows for {start}..{end} "
-                f"(rate-limited or unknown symbol — not treated as 'no sessions')"
-            )
-        if getattr(frame.columns, "nlevels", 1) > 1:
-            frame.columns = frame.columns.droplevel(-1)
+        failures: list[str] = []
+        for attempt in range(1, self._retry.max_attempts + 1):
+            if attempt > 1:
+                self._sleeper(self._retry.backoff_seconds[attempt - 2])
+            try:
+                bars = self._fetch_once(
+                    yfinance,
+                    symbol,
+                    start,
+                    end,
+                    calendar=calendar,
+                )
+            except _RetryableProviderError as exc:
+                failures.append(f"{attempt}/{exc.category}: {exc.detail}")
+                self._log_attempt(
+                    symbol=symbol,
+                    start=start,
+                    end=end,
+                    attempt=attempt,
+                    outcome="retryable_failure",
+                    error_category=exc.category,
+                )
+                continue
 
-        bars = [self._row_to_bar(symbol, index, row) for index, row in frame.iterrows()]
-        validate_bars(bars, cfg=self._validation, calendar=calendar)
+            self._log_attempt(
+                symbol=symbol,
+                start=start,
+                end=end,
+                attempt=attempt,
+                outcome="success",
+                error_category=None,
+            )
+            return bars
+
+        summary = " | ".join(failures)
+        raise DataValidationError(
+            f"{symbol.upper()}: provider attempts exhausted for {start}..{end}; "
+            f"attempts: {summary}"
+        )
+
+    def _fetch_once(
+        self,
+        yfinance,
+        symbol: str,
+        start: date,
+        end: date,
+        *,
+        calendar: list[date] | None,
+    ) -> list[Bar]:
+        try:
+            frame = yfinance.download(
+                symbol,
+                start=start.isoformat(),
+                # yfinance treats `end` as exclusive.
+                end=(end + timedelta(days=1)).isoformat(),
+                auto_adjust=False,
+                actions=False,
+                progress=False,
+                threads=False,
+            )
+        except Exception as exc:
+            raise _RetryableProviderError(
+                "provider_transport", f"{type(exc).__name__}: {exc}"
+            ) from exc
+
+        if frame is None or frame.empty:
+            raise _RetryableProviderError(
+                "provider_empty",
+                "provider returned no rows (rate-limited, truncated, or unknown symbol)",
+            )
+        try:
+            if getattr(frame.columns, "nlevels", 1) > 1:
+                frame.columns = frame.columns.droplevel(-1)
+            bars = [self._row_to_bar(symbol, index, row) for index, row in frame.iterrows()]
+        except (DataValidationError, KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise _RetryableProviderError(
+                "provider_normalization", f"{type(exc).__name__}: {exc}"
+            ) from exc
+        try:
+            validate_bars(bars, cfg=self._validation, calendar=calendar)
+        except DataValidationError as exc:
+            raise _RetryableProviderError(
+                "provider_validation", f"{type(exc).__name__}: {exc}"
+            ) from exc
         return bars
+
+    def _log_attempt(
+        self,
+        *,
+        symbol: str,
+        start: date,
+        end: date,
+        attempt: int,
+        outcome: str,
+        error_category: str | None,
+    ) -> None:
+        payload = {
+            "attempt": attempt,
+            "end": end.isoformat(),
+            "error_category": error_category,
+            "max_attempts": self._retry.max_attempts,
+            "outcome": outcome,
+            "provider": "yfinance",
+            "start": start.isoformat(),
+            "symbol": symbol.upper(),
+        }
+        message = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        if self._attempt_logger is not None:
+            self._attempt_logger(message)
+        else:
+            LOGGER.info("%s", message)
 
     def fetch_split_action_history(
         self,

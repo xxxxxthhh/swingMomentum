@@ -19,6 +19,12 @@ universe:
   # Fail closed when the newest snapshot <= as_of is older than this.
   max_snapshot_age_days: 90
 
+# Deterministic provider-boundary retry policy. Total attempts include the
+# initial request; there is deliberately no jitter.
+market_data_retry:
+  max_attempts: 3
+  backoff_seconds: [2, 8]
+
 # Data-quality thresholds (constitution §12.4). Governance guards, not strategy
 # rules: changing these moves config_hash but does not bump the version.
 validation:

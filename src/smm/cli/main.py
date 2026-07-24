@@ -24,6 +24,11 @@ class Source(StrEnum):
     MARKET = "market"
 
 
+def _market_data_attempt_log(message: str) -> None:
+    """Keep provider-attempt evidence visible to CLI operators."""
+    typer.echo(message, err=True)
+
+
 @app.command("version")
 def version_cmd() -> None:
     """Print package version."""
@@ -151,7 +156,9 @@ def _ingest_market(
         cache_dir=cache_dir,
         universe_dir=universe_dir,
         validation=loaded.config.validation,
+        retry=loaded.config.market_data_retry,
         max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+        attempt_logger=_market_data_attempt_log,
         # Must be passed, not left to the default: otherwise ingest fetches the
         # configured benchmark while get_calendar keeps reading SPY, and the two
         # diverge the moment market_regime.benchmark changes. A half-wired
@@ -255,7 +262,9 @@ def _run_features(loaded, session, source: Source, cache_dir: Path, out_dir: Pat
             cache_dir=cache_dir,
             universe_dir=universe_dir,
             validation=loaded.config.validation,
+            retry=loaded.config.market_data_retry,
             max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )
 
@@ -386,7 +395,9 @@ def _execute_run_daily(
             cache_dir=cache_dir,
             universe_dir=universe_dir,
             validation=loaded.config.validation,
+            retry=loaded.config.market_data_retry,
             max_snapshot_age_days=loaded.config.universe.max_snapshot_age_days,
+            attempt_logger=_market_data_attempt_log,
             benchmark=loaded.config.market_regime.benchmark,
         )
         universe_snapshot_id = snapshot.path.stem

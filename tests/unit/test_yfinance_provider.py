@@ -5,6 +5,8 @@ Everything here except the ``network`` block runs offline.
 
 from __future__ import annotations
 
+import builtins
+import json
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -22,12 +24,24 @@ REPO = Path(__file__).resolve().parents[2]
 CONFIG = load_config(REPO / "configs" / "smm_v1_0_0.yaml").config
 
 
-def build(tmp_path: Path) -> YFinanceProvider:
+def build(
+    tmp_path: Path,
+    *,
+    sleeper=None,
+    attempt_logger=None,
+) -> YFinanceProvider:
+    kwargs = {}
+    if sleeper is not None:
+        kwargs["sleeper"] = sleeper
+    if attempt_logger is not None:
+        kwargs["attempt_logger"] = attempt_logger
     return YFinanceProvider(
         cache_dir=tmp_path / "cache",
         universe_dir=REPO / "configs" / "universe",
         validation=CONFIG.validation,
+        retry=CONFIG.market_data_retry,
         max_snapshot_age_days=CONFIG.universe.max_snapshot_age_days,
+        **kwargs,
     )
 
 
@@ -159,6 +173,147 @@ def _install_yfinance(monkeypatch: pytest.MonkeyPatch, frame: _ActionFrame) -> l
 
     monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=download))
     return calls
+
+
+def _install_yfinance_sequence(
+    monkeypatch: pytest.MonkeyPatch, responses: list[object]
+) -> list[dict]:
+    calls: list[dict] = []
+    pending = iter(responses)
+
+    def download(symbol: str, **kwargs):
+        calls.append({"symbol": symbol, **kwargs})
+        response = next(pending)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=download))
+    return calls
+
+
+def _valid_price_frame() -> _ActionFrame:
+    rows = []
+    for bar in breakout_success().bars:
+        rows.append(
+            (
+                bar.date,
+                {
+                    "Open": bar.open,
+                    "High": bar.high,
+                    "Low": bar.low,
+                    "Close": bar.close,
+                    "Adj Close": bar.adj_close,
+                    "Volume": bar.volume,
+                },
+            )
+        )
+    return _ActionFrame(rows)
+
+
+def test_primary_bars_recover_on_second_attempt_with_structured_logs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = _ActionFrame([])
+    valid = _valid_price_frame()
+    calls = _install_yfinance_sequence(monkeypatch, [empty, valid])
+    sleeps: list[float] = []
+    logs: list[str] = []
+    provider = build(tmp_path, sleeper=sleeps.append, attempt_logger=logs.append)
+    first, last = valid._rows[0][0], valid._rows[-1][0]
+
+    bars = provider.get_daily_bars("SPY", first, last)
+
+    assert len(calls) == 2
+    assert sleeps == [2.0]
+    assert len(bars) == len(valid._rows)
+    assert [json.loads(item)["outcome"] for item in logs] == [
+        "retryable_failure",
+        "success",
+    ]
+    assert json.loads(logs[0])["error_category"] == "provider_empty"
+    assert cache.covers(tmp_path / "cache", "SPY", first, last)
+
+
+def test_primary_bars_exhaust_three_attempts_without_caching_invalid_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = _ActionFrame([])
+    calls = _install_yfinance_sequence(monkeypatch, [empty, empty, empty])
+    sleeps: list[float] = []
+    logs: list[str] = []
+    provider = build(tmp_path, sleeper=sleeps.append, attempt_logger=logs.append)
+    start, end = date(2024, 1, 2), date(2024, 1, 31)
+
+    with pytest.raises(DataValidationError, match="attempts: 1/provider_empty.*3/provider_empty"):
+        provider.get_daily_bars("SPY", start, end)
+
+    assert len(calls) == 3
+    assert sleeps == [2.0, 8.0]
+    assert len(logs) == 3
+    assert not cache.covers(tmp_path / "cache", "SPY", start, end)
+
+
+def test_ohlc_invalid_payload_is_refetched_and_never_cached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invalid = _valid_price_frame()
+    first_day, first_row = invalid._rows[0]
+    first_row["Low"] = float(first_row["High"]) + 1.0
+    calls = _install_yfinance_sequence(monkeypatch, [invalid, invalid, invalid])
+    provider = build(tmp_path, sleeper=lambda _seconds: None)
+    last_day = invalid._rows[-1][0]
+
+    with pytest.raises(DataValidationError) as exc_info:
+        provider.get_daily_bars("SPY", first_day, last_day)
+
+    message = str(exc_info.value)
+    assert message.index("1/provider_normalization") < message.index(
+        "3/provider_normalization"
+    )
+    assert len(calls) == 3
+    assert not cache.covers(tmp_path / "cache", "SPY", first_day, last_day)
+
+
+def test_missing_optional_dependency_is_not_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delitem(sys.modules, "yfinance", raising=False)
+    original_import = builtins.__import__
+    imports = 0
+
+    def missing_yfinance(name, *args, **kwargs):
+        nonlocal imports
+        if name == "yfinance":
+            imports += 1
+            raise ImportError("missing")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_yfinance)
+    sleeps: list[float] = []
+
+    with pytest.raises(DataValidationError, match="market extra"):
+        build(tmp_path, sleeper=sleeps.append).fetch(
+            "SPY", date(2024, 1, 2), date(2024, 1, 31)
+        )
+
+    assert imports == 1
+    assert sleeps == []
+
+
+def test_unknown_member_calendar_fails_before_any_provider_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_yfinance_sequence(monkeypatch, [_valid_price_frame()])
+    sleeps: list[float] = []
+
+    with pytest.raises(DataValidationError, match="provider retries cannot establish"):
+        build(tmp_path, sleeper=sleeps.append).get_daily_bars(
+            "AAPL", date(2024, 1, 2), date(2024, 1, 31)
+        )
+
+    assert calls == []
+    assert sleeps == []
 
 
 def test_fetch_split_action_history_normalises_yahoo_actions_and_checks_sessions(

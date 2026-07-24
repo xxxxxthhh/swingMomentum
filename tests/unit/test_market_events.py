@@ -29,6 +29,21 @@ def test_latest_point_in_time_snapshot_is_selected() -> None:
     assert snapshot.events[0].effective_date == date(2026, 4, 9)
 
 
+def test_canonical_snapshot_contains_crh_and_casy_history() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.volume_spike_verification,
+    )
+
+    events = {event.symbol: event for event in snapshot.events}
+    assert snapshot.snapshot_id == "2026-07-23_sp500_constituent_changes"
+    assert events["CRH"].source_published_date == date(2025, 12, 5)
+    assert events["CRH"].effective_date == date(2025, 12, 22)
+    assert events["CRH"].action == "addition"
+    assert events["CASY"].effective_date == date(2026, 4, 9)
+
+
 def test_future_snapshot_is_not_visible(tmp_path: Path) -> None:
     source = REPO / "configs" / "market_events" / (
         "2026-04-06_sp500_constituent_changes.csv"

@@ -277,6 +277,49 @@ def test_casy_effective_day_volume_spike_is_verified() -> None:
     assert records[0].session == date(2026, 4, 9)
 
 
+def test_crh_t_minus_one_volume_spike_uses_canonical_snapshot() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 7, 23),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(9, start=date(2025, 12, 9), symbol="CRH")
+    bars = [
+        bar(item.date, symbol="CRH", volume=volume)
+        for item, volume in zip(
+            bars,
+            [
+                3_800_000,
+                4_000_000,
+                4_100_000,
+                4_200_000,
+                4_229_700,
+                8_073_100,
+                8_465_200,
+                9_489_600,
+                140_096_300,
+            ],
+            strict=True,
+        )
+    ]
+
+    records = check_volume_anomalies(
+        bars,
+        cfg=CFG,
+        calendar=[item.date for item in bars] + [date(2025, 12, 22)],
+        event_snapshot=snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].symbol == "CRH"
+    assert records[0].session == date(2025, 12, 19)
+    assert records[0].effective_date == date(2025, 12, 22)
+    assert records[0].raw_volume == 140_096_300
+    assert records[0].median_volume == 4_229_700
+    assert records[0].ratio == pytest.approx(33.1220417524)
+    assert records[0].snapshot_id == "2026-07-23_sp500_constituent_changes"
+
+
 def test_verified_event_outside_t_minus_one_or_t_window_is_rejected() -> None:
     snapshot = load_market_event_snapshot(
         REPO / "configs" / "market_events",

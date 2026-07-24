@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 文档类型 | decision |
-| 状态 | proposed（Issue #73 方向已裁决；等待本 ADR PR 复审） |
+| 状态 | accepted（PR #74；Task Reviewer comment `5066313861`） |
 | 日期 | 2026-07-24 |
 | 策略版本 | SMM-V1.0.0 / SMM-V1.1.0（不 bump；重试政策改变 `config_hash`） |
 | 关联规格 | [../../CONSTITUTION.md](../../CONSTITUTION.md)（原则 9、11、13；§12.4、§37、§48、§53、§59） |
@@ -224,3 +224,4 @@ manifest shape 或策略版本。
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-07-24 | proposed | Issue #73 Task Reviewer comment `5066183031` 批准 A1 方向、暂缓 B、确认 C 为 Stage C gate；本 ADR 冻结实现前的具体边界，等待 PR 复审 |
+| 2026-07-24 | accepted | PR #74 Task Reviewer comment `5066313861` 接受精确 HEAD `07f45390063595aed2726540c8e93e2ca7b2eab8`，无 blocker，并明确授权合并 |

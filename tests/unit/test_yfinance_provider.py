@@ -110,8 +110,8 @@ def test_cached_fisv_hole_is_repaired_and_replayed_with_official_evidence(
 
     spy = [make("SPY", session, 100.0, 1_000_000) for session in days]
     fisv = [
-        make("FISV", days[0], 64.260002, 5_427_200),
-        make("FISV", days[2], 64.529999, 9_274_500),
+        make("FISV", days[0], 64.26000213623047, 5_427_200),
+        make("FISV", days[2], 64.52999877929688, 9_274_500),
     ]
     cache.write_bars(
         tmp_path / "cache",

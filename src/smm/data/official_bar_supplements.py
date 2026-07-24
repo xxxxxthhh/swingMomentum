@@ -249,6 +249,23 @@ def reconcile_official_bar_supplements(
             raise DataValidationError(
                 f"{symbol}: official supplement {session} is outside the trading calendar"
             )
+        previous_bar = present.get(supplement.adjustment_previous_session)
+        next_bar = present.get(supplement.adjustment_next_session)
+        if previous_bar is None or next_bar is None:
+            raise DataValidationError(
+                f"{symbol}: official supplement {session} adjustment evidence "
+                "requires actual provider bars for both adjacent sessions"
+            )
+        if (
+            previous_bar.close != supplement.adjustment_previous_close
+            or previous_bar.adj_close != supplement.adjustment_previous_adj_close
+            or next_bar.close != supplement.adjustment_next_close
+            or next_bar.adj_close != supplement.adjustment_next_adj_close
+        ):
+            raise DataValidationError(
+                f"{symbol}: official supplement {session} adjustment evidence "
+                "conflicts with actual provider bars"
+            )
         provider_bar = present.get(session)
         if provider_bar is None:
             if session not in missing:

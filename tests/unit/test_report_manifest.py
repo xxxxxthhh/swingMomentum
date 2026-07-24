@@ -24,6 +24,7 @@ _SHADOW_ARTIFACT_HASHES = {
     "portfolio_snapshot": "d" * 64,
     "circuit_state": "e" * 64,
     "risk_decisions": "f" * 64,
+    "market_data_verifications": "1" * 64,
 }
 _DEFAULT_SHADOW_ARTIFACT_HASHES = object()
 
@@ -66,6 +67,7 @@ def test_manifest_default_mode_preserves_the_m4_bytes() -> None:
         '{"artifacts":{"report_csv":"aaa","report_markdown":"bbb"},'
         '"as_of":"2024-06-10","config_hash":"abc123",'
         '"execution_mode":"mvp_a_signal","git_commit":"deadbeef",'
+        '"market_event_snapshot":null,'
         '"provider_source":"synthetic","regime":"risk_on",'
         '"reproduction_contract":{"conditionally_excluded_fields":["git_commit"]},'
         '"strategy_version":"SMM-V1.0.0",'

@@ -192,6 +192,9 @@ def run_daily(
     already-sanitized artifact root for this strategy_version/config_hash.
     """
     selected_mode = validate_run_daily_mode(mode, portfolio_snapshot)
+    reset_evidence = getattr(provider, "reset_market_data_verifications", None)
+    if callable(reset_evidence):
+        reset_evidence()
     if selected_mode is ExecutionMode.SHADOW:
         return _run_shadow_daily(
             provider,
@@ -293,6 +296,11 @@ def run_daily(
             | {etf.upper() for etf in loaded.config.sector_benchmarks.values()},
         )
         snapshot_bytes = snapshot_path(tmp_dir, session).read_bytes()
+        verification_text, market_event_snapshot = _market_data_evidence(provider)
+        (tmp_dir / "market_data_verifications.json").write_text(
+            verification_text,
+            encoding="utf-8",
+        )
 
         manifest = build_manifest(
             as_of=session,
@@ -311,12 +319,19 @@ def run_daily(
                 "report_csv": _sha256_text(csv_text),
                 "report_markdown": _sha256_text(markdown_text),
                 "features_snapshot": _sha256_bytes(snapshot_bytes),
+                "market_data_verifications": _sha256_text(verification_text),
             },
+            market_event_snapshot=market_event_snapshot,
         )
         manifest_text = render_manifest(manifest)
 
         if manifest_file.exists():
             if manifest_file.read_text(encoding="utf-8") == manifest_text:
+                _verify_market_data_artifact(
+                    day_dir,
+                    _sha256_text(verification_text),
+                    session,
+                )
                 return _result(session, feature_run.regime, rows, manifest_file, skipped=True)
             raise DataValidationError(
                 f"completed daily task for {session} in {root} already exists with "
@@ -328,6 +343,11 @@ def run_daily(
             # confirmed there, so it is not "the" result, just regenerable.
             shutil.rmtree(day_dir)
         tmp_dir.rename(day_dir)
+        _verify_market_data_artifact(
+            day_dir,
+            _sha256_text(verification_text),
+            session,
+        )
         manifest_file.write_text(manifest_text, encoding="utf-8")
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -522,6 +542,11 @@ def _run_shadow_daily(
         snapshot_bytes = snapshot_path(tmp_dir, session).read_bytes()
         circuit_text = render_circuit_state_artifact(circuit_state)
         risk_text = render_risk_decisions_artifact(risk_decisions)
+        verification_text, market_event_snapshot = _market_data_evidence(provider)
+        (tmp_dir / "market_data_verifications.json").write_text(
+            verification_text,
+            encoding="utf-8",
+        )
         artifact_hashes = {
             "report_csv": _sha256_text(csv_text),
             "report_markdown": _sha256_text(markdown_text),
@@ -529,6 +554,7 @@ def _run_shadow_daily(
             "portfolio_snapshot": portfolio_snapshot_artifact_sha256(snapshot),
             "circuit_state": _sha256_text(circuit_text),
             "risk_decisions": _sha256_text(risk_text),
+            "market_data_verifications": _sha256_text(verification_text),
         }
         manifest = build_shadow_manifest(
             as_of=session,
@@ -545,6 +571,7 @@ def _run_shadow_daily(
             },
             artifact_hashes=artifact_hashes,
             circuit_state_identity=circuit_state_identity(circuit_state),
+            market_event_snapshot=market_event_snapshot,
         )
         manifest_text = render_manifest(manifest)
 
@@ -600,6 +627,7 @@ def _verify_shadow_artifacts(
         "portfolio_snapshot": "portfolio_snapshot.json",
         "circuit_state": "circuit_state.json",
         "risk_decisions": "risk_decisions.json",
+        "market_data_verifications": "market_data_verifications.json",
     }
     for name, filename in filenames.items():
         target = day_dir / filename
@@ -607,6 +635,42 @@ def _verify_shadow_artifacts(
             raise DataValidationError(
                 f"shadow artifact hash mismatch for {name} in completed session {session}"
             )
+
+
+def _market_data_evidence(
+    provider: _Provider,
+) -> tuple[str, dict[str, str] | None]:
+    read_records = getattr(provider, "market_data_verifications", None)
+    records = tuple(read_records()) if callable(read_records) else ()
+    payloads = sorted(
+        (record.to_payload() for record in records),
+        key=lambda item: (
+            str(item["symbol"]),
+            str(item["session"]),
+            str(item["event_id"]),
+        ),
+    )
+    read_identity = getattr(provider, "market_event_snapshot_identity", None)
+    identity = read_identity() if callable(read_identity) else None
+    return (
+        dump_json_deterministic(
+            {"schema_version": 1, "verifications": payloads}
+        ),
+        identity,
+    )
+
+
+def _verify_market_data_artifact(
+    day_dir: Path,
+    expected_sha256: str,
+    session: date,
+) -> None:
+    target = day_dir / "market_data_verifications.json"
+    if not target.is_file() or _sha256_bytes(target.read_bytes()) != expected_sha256:
+        raise DataValidationError(
+            f"market-data verification artifact hash mismatch for completed "
+            f"session {session}"
+        )
 
 
 def _load_trigger_candidate_source(

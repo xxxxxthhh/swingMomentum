@@ -257,6 +257,34 @@ class ExecutionSection(BaseModel):
     commission_per_share: Decimal | None = Field(default=None, ge=Decimal("0"))
 
 
+class VolumeSpikeVerificationSection(BaseModel):
+    """Frozen catalog and matching policy for reviewed volume anomalies."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy: Literal["official_sp500_constituent_change_v1"]
+    allowed_indexes: list[Literal["S&P 500"]]
+    allowed_actions: list[Literal["addition", "deletion"]]
+    session_offsets: list[Literal[-1, 0]]
+    allowed_source_hosts: list[str]
+
+    @model_validator(mode="after")
+    def exact_policy_catalog(self) -> VolumeSpikeVerificationSection:
+        if self.allowed_indexes != ["S&P 500"]:
+            raise ValueError("volume-spike allowed_indexes must be exactly ['S&P 500']")
+        if self.allowed_actions != ["addition", "deletion"]:
+            raise ValueError(
+                "volume-spike allowed_actions must be exactly ['addition', 'deletion']"
+            )
+        if self.session_offsets != [-1, 0]:
+            raise ValueError("volume-spike session_offsets must be exactly [-1, 0]")
+        if not self.allowed_source_hosts or len(set(self.allowed_source_hosts)) != len(
+            self.allowed_source_hosts
+        ):
+            raise ValueError("volume-spike source hosts must be non-empty and unique")
+        return self
+
+
 class ValidationSection(BaseModel):
     """Data-quality thresholds (constitution §12.4).
 
@@ -270,6 +298,7 @@ class ValidationSection(BaseModel):
 
     max_abs_daily_return: float = Field(gt=0, le=10)
     max_volume_spike_ratio: float = Field(gt=1)
+    volume_spike_verification: VolumeSpikeVerificationSection
     max_session_gap_weekdays: int = Field(ge=0)
     min_adj_factor: float = Field(gt=0, le=1)
     adj_factor_tolerance: float = Field(gt=0, lt=1)

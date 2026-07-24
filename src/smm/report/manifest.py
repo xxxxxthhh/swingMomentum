@@ -43,6 +43,7 @@ _SHADOW_ARTIFACT_KEYS = (
     "portfolio_snapshot",
     "circuit_state",
     "risk_decisions",
+    "market_data_verifications",
 )
 
 
@@ -57,6 +58,7 @@ def build_manifest(
     git_commit: str,
     transition_batch: dict[str, Any],
     artifact_hashes: dict[str, str],
+    market_event_snapshot: Mapping[str, str] | None = None,
     execution_mode: ExecutionMode | str = ExecutionMode.MVP_A_SIGNAL,
 ) -> dict[str, Any]:
     """Assemble the manifest payload. No wall-clock, run id, or temp path
@@ -75,6 +77,11 @@ def build_manifest(
         "git_commit": git_commit,
         "transition_batch": transition_batch,
         "artifacts": artifact_hashes,
+        "market_event_snapshot": (
+            _validated_market_event_snapshot(market_event_snapshot)
+            if market_event_snapshot is not None
+            else None
+        ),
         "reproduction_contract": {
             "conditionally_excluded_fields": list(CONDITIONALLY_EXCLUDED_FIELDS),
         },
@@ -93,6 +100,7 @@ def build_shadow_manifest(
     transition_batch: dict[str, Any],
     artifact_hashes: Mapping[str, object],
     circuit_state_identity: object,
+    market_event_snapshot: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble the strict, pure M7 shadow-manifest payload.
 
@@ -111,6 +119,7 @@ def build_shadow_manifest(
         transition_batch=transition_batch,
         artifact_hashes=_validated_shadow_artifact_hashes(artifact_hashes),
         execution_mode=ExecutionMode.SHADOW,
+        market_event_snapshot=market_event_snapshot,
     )
     manifest["circuit_state_identity"] = _validated_sha256(
         circuit_state_identity,
@@ -152,3 +161,20 @@ def _validated_sha256(value: object, *, label: str) -> str:
     if not isinstance(value, str) or not _SHA256_HEX.fullmatch(value):
         raise DataValidationError(f"{label} must be a 64-character lowercase SHA-256 hex")
     return value
+
+
+def _validated_market_event_snapshot(value: Mapping[str, str]) -> dict[str, str]:
+    if not isinstance(value, Mapping) or set(value) != {"id", "sha256"}:
+        raise DataValidationError(
+            "market_event_snapshot must contain exactly id and sha256"
+        )
+    snapshot_id = value["id"]
+    if not isinstance(snapshot_id, str) or not snapshot_id:
+        raise DataValidationError("market_event_snapshot id must be non-empty")
+    return {
+        "id": snapshot_id,
+        "sha256": _validated_sha256(
+            value["sha256"],
+            label="market_event_snapshot sha256",
+        ),
+    }

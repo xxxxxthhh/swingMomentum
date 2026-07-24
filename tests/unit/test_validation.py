@@ -10,6 +10,7 @@ import pytest
 from smm.config.loader import load_config
 from smm.core.errors import DataValidationError, FailClosedError
 from smm.data.generator import breakout_success
+from smm.data.market_events import load_market_event_snapshot
 from smm.data.validation import (
     EXCHANGE_TZ,
     check_adj_factor,
@@ -193,6 +194,105 @@ def test_volume_spike_rejected() -> None:
     bars[4] = bar(bars[4].date, volume=1_000_000 * 40)
     with pytest.raises(DataValidationError, match="the median"):
         check_volume_anomalies(bars, cfg=CFG)
+
+
+def test_casy_t_minus_one_volume_spike_is_verified_by_official_event() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 4, 8),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(9, start=date(2026, 3, 27), symbol="CASY")
+    volumes = [
+        300_000,
+        312_400,
+        320_000,
+        330_000,
+        338_700,
+        340_000,
+        350_000,
+        360_000,
+        8_688_600,
+    ]
+    bars = [
+        bar(item.date, symbol="CASY", volume=volume)
+        for item, volume in zip(bars, volumes, strict=True)
+    ]
+    calendar = [item.date for item in bars] + [date(2026, 4, 9)]
+
+    records = check_volume_anomalies(
+        bars,
+        cfg=CFG,
+        calendar=calendar,
+        event_snapshot=snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].symbol == "CASY"
+    assert records[0].session == date(2026, 4, 8)
+    assert records[0].effective_date == date(2026, 4, 9)
+    assert records[0].action == "addition"
+    assert records[0].raw_volume == 8_688_600
+    assert records[0].median_volume == 338_700
+    assert records[0].ratio == pytest.approx(25.6527900797)
+    assert records[0].snapshot_id == snapshot.snapshot_id
+    assert records[0].snapshot_sha256 == snapshot.sha256
+
+
+def test_casy_effective_day_volume_spike_is_verified() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 4, 9),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(10, start=date(2026, 3, 27), symbol="CASY")
+    bars = [
+        bar(item.date, symbol="CASY", volume=volume)
+        for item, volume in zip(
+            bars,
+            [
+                300_000,
+                312_400,
+                320_000,
+                330_000,
+                338_700,
+                340_000,
+                350_000,
+                360_000,
+                370_000,
+                8_688_600,
+            ],
+            strict=True,
+        )
+    ]
+
+    records = check_volume_anomalies(
+        bars,
+        cfg=CFG,
+        calendar=[item.date for item in bars],
+        event_snapshot=snapshot,
+    )
+
+    assert len(records) == 1
+    assert records[0].session == date(2026, 4, 9)
+
+
+def test_verified_event_outside_t_minus_one_or_t_window_is_rejected() -> None:
+    snapshot = load_market_event_snapshot(
+        REPO / "configs" / "market_events",
+        as_of=date(2026, 4, 7),
+        cfg=CFG.volume_spike_verification,
+    )
+    bars = series(8, start=date(2026, 3, 27), symbol="CASY")
+    bars[-1] = bar(date(2026, 4, 7), symbol="CASY", volume=40_000_000)
+
+    with pytest.raises(DataValidationError, match="no unique official"):
+        check_volume_anomalies(
+            bars,
+            cfg=CFG,
+            calendar=[item.date for item in bars] + [date(2026, 4, 8), date(2026, 4, 9)],
+            event_snapshot=snapshot,
+        )
 
 
 # --- 复权因子异常 ----------------------------------------------------------

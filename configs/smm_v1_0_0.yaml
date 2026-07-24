@@ -30,6 +30,12 @@ market_data_retry:
 validation:
   max_abs_daily_return: 0.50        # |close/prev_close - 1| above this stops the run
   max_volume_spike_ratio: 25.0      # vs the series median
+  volume_spike_verification:
+    policy: official_sp500_constituent_change_v1
+    allowed_indexes: ["S&P 500"]
+    allowed_actions: [addition, deletion]
+    session_offsets: [-1, 0]
+    allowed_source_hosts: [press.spglobal.com, www.spglobal.com]
   max_session_gap_weekdays: 5       # weekdays missing between consecutive bars
   min_adj_factor: 0.05
   adj_factor_tolerance: 0.000001

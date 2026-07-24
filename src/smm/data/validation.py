@@ -26,12 +26,18 @@ Re-checking them here would be dead code; the mapping is recorded instead.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from smm.config.schema import ValidationSection
 from smm.core.errors import DataValidationError
+from smm.data.market_events import (
+    MarketEventSnapshot,
+    VolumeSpikeVerification,
+    match_market_event,
+)
 from smm.domain.models import Bar
 
 #: US equity session dates are Eastern. Deriving them from the runner's local
@@ -187,18 +193,55 @@ def check_price_jumps(bars: Sequence[Bar], *, cfg: ValidationSection) -> None:
             )
 
 
-def check_volume_anomalies(bars: Sequence[Bar], *, cfg: ValidationSection) -> None:
-    """Zero-volume sessions and implausible spikes (§12.4 volume anomalies)."""
+def check_volume_anomalies(
+    bars: Sequence[Bar],
+    *,
+    cfg: ValidationSection,
+    calendar: Iterable[date] | None = None,
+    event_snapshot: MarketEventSnapshot | None = None,
+) -> tuple[VolumeSpikeVerification, ...]:
+    """Reject bad volume, or verify an exact reviewed T-1/T index event."""
     volumes = sorted(b.volume for b in bars)
     median = volumes[len(volumes) // 2]
+    records: list[VolumeSpikeVerification] = []
+    sessions = list(calendar) if calendar is not None else None
     for bar in bars:
+        if not math.isfinite(bar.volume):
+            _fail(f"{bar.symbol}: {bar.date} has non-finite volume")
         if bar.volume <= 0:
             _fail(f"{bar.symbol}: {bar.date} has zero volume on a session")
         if median > 0 and bar.volume / median > cfg.max_volume_spike_ratio:
-            _fail(
-                f"{bar.symbol}: {bar.date} volume {bar.volume:,.0f} is "
-                f"{bar.volume / median:.0f}x the median"
+            if event_snapshot is None or sessions is None:
+                _fail(
+                    f"{bar.symbol}: {bar.date} volume {bar.volume:,.0f} is "
+                    f"{bar.volume / median:.0f}x the median and has no official "
+                    "event snapshot/calendar verification"
+                )
+            event = match_market_event(
+                event_snapshot,
+                symbol=bar.symbol,
+                spike_session=bar.date,
+                calendar=sessions,
             )
+            records.append(
+                VolumeSpikeVerification(
+                    symbol=bar.symbol,
+                    session=bar.date,
+                    raw_volume=bar.volume,
+                    median_volume=median,
+                    ratio=bar.volume / median,
+                    threshold=cfg.max_volume_spike_ratio,
+                    event_id=event.event_id,
+                    index_name=event.index_name,
+                    action=event.action,
+                    effective_date=event.effective_date,
+                    source_published_date=event.source_published_date,
+                    source_url=event.source_url,
+                    snapshot_id=event_snapshot.snapshot_id,
+                    snapshot_sha256=event_snapshot.sha256,
+                )
+            )
+    return tuple(records)
 
 
 def check_adj_factor(bars: Sequence[Bar], *, cfg: ValidationSection) -> None:
@@ -275,13 +318,21 @@ def validate_bars(
     *,
     cfg: ValidationSection,
     calendar: Iterable[date] | None = None,
-) -> None:
+    event_snapshot: MarketEventSnapshot | None = None,
+) -> tuple[VolumeSpikeVerification, ...]:
     """Run every §12.4 check. Raises on the first failure; never repairs."""
+    sessions = list(calendar) if calendar is not None else None
     check_ordering_and_duplicates(bars)
-    check_session_dates(bars, calendar=calendar)
-    check_session_completeness(bars, calendar=calendar)
+    check_session_dates(bars, calendar=sessions)
+    check_session_completeness(bars, calendar=sessions)
     check_session_continuity(bars, cfg=cfg)
     check_price_jumps(bars, cfg=cfg)
-    check_volume_anomalies(bars, cfg=cfg)
     check_adj_factor(bars, cfg=cfg)
     check_split_artefacts(bars, cfg=cfg)
+    verifications = check_volume_anomalies(
+        bars,
+        cfg=cfg,
+        calendar=sessions,
+        event_snapshot=event_snapshot,
+    )
+    return verifications

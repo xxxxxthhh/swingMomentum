@@ -156,6 +156,7 @@ def test_shadow_consumes_only_start_of_run_backlog_and_seals_the_strict_bundle(
         "portfolio_snapshot.json",
         "circuit_state.json",
         "risk_decisions.json",
+        "market_data_verifications.json",
         "manifest.json",
     }
     manifest_text = (day_dir / "manifest.json").read_text(encoding="utf-8")
@@ -168,6 +169,7 @@ def test_shadow_consumes_only_start_of_run_backlog_and_seals_the_strict_bundle(
         "portfolio_snapshot",
         "circuit_state",
         "risk_decisions",
+        "market_data_verifications",
     }
     assert str(snapshot_source) not in manifest_text
 
